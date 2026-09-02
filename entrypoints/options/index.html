@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ark settings</title>
+  </head>
+  <body>
+    <main class="settings-shell">
+      <header class="settings-header">
+        <div class="brand-mark" aria-hidden="true">A</div>
+        <div>
+          <h1 data-i18n="modelSettings">Model settings</h1>
+          <p data-i18n="settingsIntroduction">
+            Choose the model Ark uses when you organise a window.
+          </p>
+        </div>
+      </header>
+
+      <form id="settings-form" class="settings-form">
+        <fieldset class="provider-fieldset">
+          <legend data-i18n="provider">Provider</legend>
+          <div class="provider-switch">
+            <label
+              ><input type="radio" name="provider" value="openai" /><span
+                >OpenAI</span
+              ></label
+            >
+            <label
+              ><input type="radio" name="provider" value="anthropic" /><span
+                >Anthropic</span
+              ></label
+            >
+            <label
+              ><input type="radio" name="provider" value="gemini" /><span
+                >Gemini</span
+              ></label
+            >
+            <label
+              ><input type="radio" name="provider" value="openrouter" /><span
+                >OpenRouter</span
+              ></label
+            >
+            <label
+              ><input type="radio" name="provider" value="custom" /><span
+                data-i18n="customProvider"
+                >Custom</span
+              ></label
+            >
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="api-key" data-i18n="apiKey">API key</label>
+          <input
+            id="api-key"
+            name="apiKey"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            required
+            data-i18n-placeholder="apiKeyPlaceholder"
+          />
+          <p class="field-help" data-i18n="apiKeyHelp">
+            Stored only in this Chrome profile.
+          </p>
+        </div>
+
+        <div id="base-url-field" class="field" hidden>
+          <label for="base-url" data-i18n="baseUrl">Base URL</label>
+          <input
+            id="base-url"
+            name="baseUrl"
+            type="url"
+            inputmode="url"
+            spellcheck="false"
+            data-i18n-placeholder="baseUrlPlaceholder"
+          />
+          <p class="field-help" data-i18n="baseUrlHelp">
+            Use HTTPS, or loopback HTTP for a local model.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="model" data-i18n="model">Model</label>
+          <div class="model-row">
+            <input
+              id="model"
+              name="model"
+              autocomplete="off"
+              spellcheck="false"
+              required
+              data-i18n-placeholder="modelPlaceholder"
+            />
+            <button
+              id="load-models"
+              class="secondary-button"
+              type="button"
+              data-i18n="loadModels"
+            >
+              Load models
+            </button>
+          </div>
+          <label
+            id="model-picker-label"
+            class="model-picker-label"
+            for="model-picker"
+            data-i18n="loadedModels"
+            hidden
+            >Loaded models</label
+          >
+          <select
+            id="model-picker"
+            aria-labelledby="model-picker-label"
+            hidden
+          ></select>
+          <p class="field-help" data-i18n="modelHelp">
+            Choose from the loaded list or type any model ID.
+          </p>
+        </div>
+
+        <div class="privacy-note">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 3 5.5 5.8v5.7c0 4.2 2.7 7.9 6.5 9.5 3.8-1.6 6.5-5.3 6.5-9.5V5.8L12 3Zm0 3 3.8 1.6v3.9c0 2.8-1.5 5.4-3.8 6.8-2.3-1.4-3.8-4-3.8-6.8V7.6L12 6Z"
+            />
+          </svg>
+          <p data-i18n="privacyNotice">
+            Tab titles and full URLs go directly to your selected provider. Ark
+            has no server.
+          </p>
+        </div>
+
+        <div class="form-footer">
+          <p
+            id="settings-status"
+            class="status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <button
+            id="save-settings"
+            class="primary-button"
+            type="submit"
+            data-i18n="saveSettings"
+          >
+            Save settings
+          </button>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

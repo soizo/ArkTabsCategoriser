@@ -1,0 +1,277 @@
+@import "../../src/ui/theme.css";
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  padding: 48px 24px;
+  background: var(--ark-canvas);
+}
+
+.settings-shell {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.settings-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 24px;
+}
+
+.brand-mark {
+  display: grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+  color: white;
+  background: var(--ark-accent);
+  font-size: 20px;
+  font-weight: 720;
+  box-shadow: 0 8px 18px rgb(62 48 70 / 16%);
+}
+
+h1 {
+  margin: 0 0 5px;
+  font-size: clamp(24px, 4vw, 32px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.settings-header p,
+.field-help,
+.privacy-note p {
+  color: var(--ark-muted);
+}
+
+.settings-header p {
+  max-width: 58ch;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.settings-form {
+  padding: 30px;
+  border: 1px solid var(--ark-border);
+  border-radius: var(--ark-radius-lg);
+  background: var(--ark-surface);
+  box-shadow: var(--ark-shadow);
+}
+
+.provider-fieldset {
+  min-width: 0;
+  margin: 0 0 26px;
+  padding: 0;
+  border: 0;
+}
+
+.provider-fieldset legend,
+.field > label {
+  margin-bottom: 9px;
+  color: var(--ark-text);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.provider-fieldset legend {
+  padding: 0;
+}
+
+.field > label {
+  display: block;
+}
+
+.provider-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.provider-switch label {
+  position: relative;
+}
+
+.provider-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.provider-switch span {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--ark-border);
+  border-radius: var(--ark-radius-sm);
+  background: var(--ark-surface-raised);
+  color: var(--ark-muted);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.provider-switch input:checked + span {
+  border-color: var(--ark-accent);
+  color: white;
+  background: var(--ark-accent);
+}
+
+.provider-switch input:focus-visible + span {
+  outline: 3px solid color-mix(in srgb, var(--ark-focus) 72%, white);
+  outline-offset: 2px;
+}
+
+.field + .field {
+  margin-top: 22px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--ark-border-strong);
+  border-radius: var(--ark-radius-sm);
+  color: var(--ark-text);
+  background: var(--ark-surface-raised);
+  font-size: 14px;
+}
+
+.field input {
+  caret-color: var(--ark-accent);
+}
+
+.field input::placeholder {
+  color: #786e7e;
+}
+
+.field input:hover {
+  border-color: var(--ark-accent);
+}
+
+.model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.model-picker-label {
+  display: block;
+  margin: 10px 0 7px;
+  color: var(--ark-muted);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.field-help {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 44px;
+  border-radius: var(--ark-radius-sm);
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.primary-button {
+  min-width: 124px;
+  border: 1px solid var(--ark-accent);
+  color: white;
+  background: var(--ark-accent);
+}
+
+.primary-button:hover {
+  border-color: var(--ark-accent-hover);
+  background: var(--ark-accent-hover);
+}
+
+.secondary-button {
+  border: 1px solid var(--ark-border-strong);
+  color: var(--ark-text);
+  background: var(--ark-surface-raised);
+}
+
+.secondary-button:hover {
+  border-color: var(--ark-accent);
+  background: var(--ark-accent-soft);
+}
+
+.privacy-note {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ark-border);
+}
+
+.privacy-note svg {
+  width: 20px;
+  fill: var(--ark-accent);
+}
+
+.privacy-note p {
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.form-footer {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+
+.status {
+  min-height: 20px;
+  margin: 0;
+  color: var(--ark-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.status[data-kind="error"] {
+  color: var(--ark-danger);
+}
+
+.status[data-kind="success"] {
+  color: var(--ark-success);
+}
+
+@media (max-width: 560px) {
+  body {
+    padding: 24px 14px;
+  }
+
+  .settings-form {
+    padding: 22px 18px;
+  }
+
+  .model-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primary-button {
+    width: 100%;
+  }
+}
