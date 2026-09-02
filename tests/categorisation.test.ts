@@ -146,6 +146,7 @@ describe("buildCategorisationPrompt", () => {
     expect(prompt.system).toContain("8");
     expect(prompt.system).toContain("ungroupedTabIds");
     expect(prompt.system).toContain("without a useful shared category");
+    expect(prompt.system).toContain("domain as secondary context");
     expect(prompt.user).toContain("WXT documentation");
     expect(prompt.user).toContain(
       "https://developer.chrome.com/docs/extensions",

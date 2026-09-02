@@ -71,6 +71,7 @@ export function buildCategorisationPrompt(
     system: [
       "Categorise supplied browser tabs into up to 8 non-empty groups.",
       `Write short group names in locale ${locale}.`,
+      "Prioritise each tab's title and URL path as signals of its subject. Treat the domain as secondary context, and do not group tabs merely because they share a domain.",
       "Put tabs without a useful shared category in ungroupedTabIds.",
       "Include every tab ID exactly once across groups and ungroupedTabIds.",
       "Return JSON only with this schema:",
