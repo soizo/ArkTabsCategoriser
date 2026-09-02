@@ -1,0 +1,67 @@
+:root {
+  color-scheme: light;
+  --ark-canvas: #e9e5ed;
+  --ark-surface: #f7f4f8;
+  --ark-surface-raised: #ffffff;
+  --ark-text: #28232d;
+  --ark-muted: #655c6c;
+  --ark-border: #d4ccd8;
+  --ark-border-strong: #b7acbd;
+  --ark-accent: #5d4d69;
+  --ark-accent-hover: #4e4059;
+  --ark-accent-soft: #e2d8e8;
+  --ark-danger: #9b3340;
+  --ark-success: #356b50;
+  --ark-focus: #765889;
+  --ark-radius-sm: 9px;
+  --ark-radius-md: 13px;
+  --ark-radius-lg: 18px;
+  --ark-shadow: 0 12px 32px rgb(62 48 70 / 12%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  color: var(--ark-text);
+  background: var(--ark-canvas);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  color: var(--ark-text);
+  background: var(--ark-accent-soft);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button,
+input,
+label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ark-focus) 72%, white);
+  outline-offset: 2px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+  }
+}
