@@ -1,31 +1,101 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ark</title>
   </head>
   <body>
     <main class="popup-shell">
       <header class="popup-header">
-        <div class="popup-brand"><span class="mini-mark" aria-hidden="true">A</span><strong>Ark</strong></div>
-        <button id="settings" class="icon-button" type="button" aria-label="Settings">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 3.5h-4L10.7 6A8 8 0 0 0 9 7L6.6 6l-2 3.4 2 1.5a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.3 2.6h4l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5ZM13 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z"/></svg>
+        <div class="popup-brand">
+          <span class="mini-mark" aria-hidden="true">A</span
+          ><strong>Ark</strong>
+        </div>
+        <button
+          id="settings"
+          class="icon-button"
+          type="button"
+          aria-label="Settings"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 3.5h-4L10.7 6A8 8 0 0 0 9 7L6.6 6l-2 3.4 2 1.5a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.3 2.6h4l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5ZM13 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z"
+            />
+          </svg>
         </button>
       </header>
 
       <section class="tab-summary" aria-labelledby="tab-count-label">
         <div id="tab-count" class="tab-count" aria-live="polite">0</div>
-        <p id="tab-count-label"></p>
+        <div class="tab-summary-copy">
+          <strong id="tab-count-label"></strong>
+          <span data-i18n="eligibleTabScope"
+            >Current window · pinned tabs excluded</span
+          >
+        </div>
       </section>
 
-      <p id="active-model" class="active-model" hidden></p>
+      <section
+        id="model-control"
+        class="model-control"
+        aria-labelledby="active-model-label"
+      >
+        <label
+          id="active-model-label"
+          for="active-model"
+          data-i18n="activeModel"
+          >Active model</label
+        >
+        <div class="popup-model-row">
+          <select id="active-model" class="active-model" hidden></select>
+          <button
+            id="test-model"
+            class="test-model-button"
+            type="button"
+            data-i18n="test"
+            hidden
+          >
+            Test
+          </button>
+        </div>
+      </section>
 
-      <button id="organise" class="organise-button" type="button"></button>
-      <p id="popup-status" class="popup-status" role="status" aria-live="polite"></p>
+      <button id="organise" class="organise-button" type="button">
+        <span id="organise-label"></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </button>
+
+      <section
+        id="reasoning-panel"
+        class="reasoning-panel"
+        aria-labelledby="reasoning-heading"
+        hidden
+      >
+        <header>
+          <span class="reasoning-pulse" aria-hidden="true"></span>
+          <h2 id="reasoning-heading" data-i18n="modelReasoning">
+            Model is thinking
+          </h2>
+          <span id="reasoning-elapsed" class="reasoning-elapsed"></span>
+        </header>
+        <p id="reasoning-content"></p>
+      </section>
+      <p
+        id="popup-status"
+        class="popup-status"
+        role="status"
+        aria-live="polite"
+      ></p>
 
       <footer class="popup-footer">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5.5 5.8v5.7c0 4.2 2.7 7.9 6.5 9.5 3.8-1.6 6.5-5.3 6.5-9.5V5.8L12 3Zm0 3 3.8 1.6v3.9c0 2.8-1.5 5.4-3.8 6.8-2.3-1.4-3.8-4-3.8-6.8V7.6L12 6Z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 3 5.5 5.8v5.7c0 4.2 2.7 7.9 6.5 9.5 3.8-1.6 6.5-5.3 6.5-9.5V5.8L12 3Zm0 3 3.8 1.6v3.9c0 2.8-1.5 5.4-3.8 6.8-2.3-1.4-3.8-4-3.8-6.8V7.6L12 6Z"
+          />
+        </svg>
         <span data-i18n="dataSentShort">Sends titles + full URLs</span>
       </footer>
     </main>

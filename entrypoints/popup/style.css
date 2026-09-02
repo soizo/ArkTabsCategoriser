@@ -8,13 +8,15 @@ body {
 }
 
 .popup-shell {
-  padding: 18px;
+  padding: 17px;
   border: 1px solid var(--ark-border);
+  border-radius: var(--ark-radius-md);
   background: var(--ark-surface);
 }
 
 .popup-header,
 .popup-brand,
+.tab-summary,
 .popup-footer {
   display: flex;
   align-items: center;
@@ -67,41 +69,100 @@ body {
 }
 
 .tab-summary {
-  margin: 28px 0 21px;
+  gap: 13px;
+  align-items: flex-end;
+  margin: 30px 2px 25px;
 }
 
 .tab-count {
-  font-size: 48px;
+  font-size: 58px;
   font-variant-numeric: tabular-nums;
-  font-weight: 690;
-  line-height: 0.95;
+  font-weight: 730;
+  line-height: 0.86;
   letter-spacing: -0.04em;
 }
 
-.tab-summary p {
-  margin: 9px 0 0;
-  color: var(--ark-muted);
+.tab-summary-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.tab-summary-copy strong {
   font-size: 13px;
 }
 
-.active-model {
-  overflow: hidden;
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--ark-border);
-  border-radius: var(--ark-radius-sm);
+.tab-summary-copy span {
   color: var(--ark-muted);
+  font-size: 11px;
+}
+
+.model-control {
+  padding: 13px;
+  border: 1px solid var(--ark-border);
+  border-radius: var(--ark-radius-md);
+  background: color-mix(
+    in srgb,
+    var(--ark-accent-soft) 42%,
+    var(--ark-surface)
+  );
+}
+
+.model-control > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ark-muted);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.popup-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.active-model {
+  width: 100%;
+  min-height: 44px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--ark-border-strong);
+  border-radius: var(--ark-radius-sm);
+  color: var(--ark-text);
   background: var(--ark-surface-raised);
   font-size: 12px;
   line-height: 1.25;
+  cursor: pointer;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.organise-button {
-  width: 100%;
+.test-model-button {
+  min-width: 68px;
   min-height: 44px;
-  padding: 11px 16px;
+  padding: 7px 11px;
+  border: 1px solid var(--ark-border-strong);
+  border-radius: var(--ark-radius-sm);
+  color: var(--ark-text);
+  background: var(--ark-surface-raised);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.test-model-button:hover:not(:disabled) {
+  border-color: var(--ark-accent);
+  background: var(--ark-accent-soft);
+}
+
+.organise-button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 11px;
+  padding: 0 15px;
   border: 1px solid var(--ark-accent);
   border-radius: var(--ark-radius-sm);
   color: white;
@@ -110,13 +171,67 @@ body {
   font-weight: 700;
 }
 
+.organise-button svg {
+  width: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .organise-button:hover:not(:disabled) {
   border-color: var(--ark-accent-hover);
   background: var(--ark-accent-hover);
 }
 
+.reasoning-panel {
+  margin-top: 11px;
+  padding: 13px;
+  border: 1px solid var(--ark-border);
+  border-radius: var(--ark-radius-md);
+  background: var(--ark-surface-raised);
+}
+
+.reasoning-panel header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reasoning-panel h2 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.reasoning-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ark-accent);
+  box-shadow: 0 0 0 4px var(--ark-accent-soft);
+  animation: reasoning-pulse 1.4s ease-in-out infinite;
+}
+
+.reasoning-elapsed {
+  margin-left: auto;
+  color: var(--ark-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reasoning-panel p {
+  max-height: 112px;
+  overflow: auto;
+  margin: 10px 0 0;
+  color: var(--ark-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .popup-status {
-  min-height: 36px;
+  min-height: 0;
   margin: 11px 2px 0;
   color: var(--ark-muted);
   font-size: 12px;
@@ -131,8 +246,13 @@ body {
   color: var(--ark-success);
 }
 
+.popup-status:not(:empty) {
+  min-height: 18px;
+}
+
 .popup-footer {
   gap: 7px;
+  margin-top: 15px;
   padding-top: 13px;
   border-top: 1px solid var(--ark-border);
   color: var(--ark-muted);
@@ -142,4 +262,17 @@ body {
 .popup-footer svg {
   width: 15px;
   flex: 0 0 15px;
+}
+
+@keyframes reasoning-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-pulse {
+    animation: none;
+  }
 }

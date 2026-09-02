@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { organiseTabs, type OrganiseDeps } from "../src/organise";
 import { ArkError } from "../src/errors";
 import type { BrowserGroup, BrowserTab, TabsPort } from "../src/grouping";
@@ -76,6 +76,7 @@ function provider(categorise: Provider["categorise"]): Provider {
     async listModels() {
       return [];
     },
+    async testConnection() {},
     categorise,
   };
 }
@@ -142,14 +143,20 @@ describe("organiseTabs", () => {
     expect(categoriseCalls).toBe(0);
   });
 
-  it("uses stable temporary IDs and applies the provider result", async () => {
+  it("uses stable temporary IDs and the saved prompt", async () => {
     const port = tabsPort();
     let receivedIds: string[] = [];
+    let receivedPrompt: string | undefined;
     const subject = deps({
+      storage: storageWith({
+        ...configuredSettings(),
+        systemPrompt: "My complete prompt",
+      }),
       tabs: port,
       providerFor: () =>
-        provider(async (_settings, tabs) => {
+        provider(async (_settings, tabs, _locale, _signal, systemPrompt) => {
           receivedIds = tabs.map(({ id }) => id);
+          receivedPrompt = systemPrompt;
           return {
             groups: [{ name: "First", tabIds: ["t0"] }],
             ungroupedTabIds: ["t1"],
@@ -162,7 +169,36 @@ describe("organiseTabs", () => {
       ungroupedCount: 1,
     });
     expect(receivedIds).toEqual(["t0", "t1"]);
+    expect(receivedPrompt).toBe("My complete prompt");
     expect(port.groupCalls).toEqual([[10]]);
+  });
+
+  it("forwards provider reasoning without changing the result", async () => {
+    const reasoning: string[] = [];
+    const subject = deps({
+      onReasoning: (text) => reasoning.push(text),
+      providerFor: () =>
+        provider(
+          async (
+            _settings,
+            _tabs,
+            _locale,
+            _signal,
+            _prompt,
+            emit,
+          ) => {
+            emit?.("First thought. ");
+            emit?.("Second thought.");
+            return {
+              groups: [{ name: "Docs", tabIds: ["t0", "t1"] }],
+              ungroupedTabIds: [],
+            };
+          },
+        ),
+    });
+
+    await organiseTabs(subject);
+    expect(reasoning).toEqual(["First thought. ", "Second thought."]);
   });
 
   it("turns an expired request into a timeout without grouping", async () => {
@@ -182,6 +218,36 @@ describe("organiseTabs", () => {
       ),
     ).rejects.toMatchObject({ code: "timeout" });
     expect(port.groupCalls).toEqual([]);
+  });
+
+  it("uses a 60 second timeout by default", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const slowProvider = provider(
+      async (_settings, _tabs, _locale, receivedSignal) => {
+        signal = receivedSignal;
+        await new Promise<void>((_resolve, reject) => {
+          receivedSignal.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        });
+        return { groups: [], ungroupedTabIds: [] };
+      },
+    );
+
+    try {
+      const subject = deps({ providerFor: () => slowProvider });
+      delete subject.timeoutMs;
+      const result = expect(
+        organiseTabs(subject),
+      ).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("preserves provider error codes without grouping", async () => {

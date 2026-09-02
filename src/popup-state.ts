@@ -3,6 +3,7 @@ import type { ArkErrorCode } from "./errors";
 export type PopupState =
   | { kind: "unconfigured"; count: number }
   | { kind: "ready"; count: number; provider: string; model: string }
+  | { kind: "testing"; count: number; provider: string; model: string }
   | { kind: "working"; count: number; provider: string; model: string }
   | {
       kind: "success";
@@ -16,6 +17,7 @@ export type PopupMessageKey =
   | "openSettings"
   | "organiseTabs"
   | "organisingTabs"
+  | "testingModel"
   | "organiseAgain"
   | "providerNotConfigured"
   | "nothingToOrganise"
@@ -23,6 +25,7 @@ export type PopupMessageKey =
   | "organisedGroupCount"
   | "permissionDenied"
   | "unauthorised"
+  | "modelForbidden"
   | "rateLimited"
   | "requestTimeout"
   | "invalidProviderResponse"
@@ -44,6 +47,7 @@ const ERROR_KEYS: Record<ArkErrorCode, PopupMessageKey> = {
   not_configured: "providerNotConfigured",
   permission_denied: "permissionDenied",
   unauthorised: "unauthorised",
+  forbidden: "modelForbidden",
   rate_limited: "rateLimited",
   timeout: "requestTimeout",
   network: "networkError",
@@ -61,6 +65,17 @@ export function popupView(state: PopupState): PopupView {
       statusKey: "providerNotConfigured",
       buttonDisabled: false,
       busy: false,
+    };
+  }
+
+  if (state.kind === "testing") {
+    return {
+      count: state.count,
+      model: `${state.provider} · ${state.model}`,
+      buttonKey: "organiseTabs",
+      statusKey: "testingModel",
+      buttonDisabled: true,
+      busy: true,
     };
   }
 

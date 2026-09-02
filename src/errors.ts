@@ -2,6 +2,7 @@ export type ArkErrorCode =
   | "not_configured"
   | "permission_denied"
   | "unauthorised"
+  | "forbidden"
   | "rate_limited"
   | "timeout"
   | "network"

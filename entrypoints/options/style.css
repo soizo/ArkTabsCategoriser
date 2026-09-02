@@ -70,7 +70,8 @@ h1 {
 }
 
 .provider-fieldset legend,
-.field > label {
+.field > label,
+.field-heading label {
   margin-bottom: 9px;
   color: var(--ark-text);
   font-size: 13px;
@@ -133,7 +134,8 @@ h1 {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
@@ -141,10 +143,12 @@ h1 {
   border-radius: var(--ark-radius-sm);
   color: var(--ark-text);
   background: var(--ark-surface-raised);
+  font: inherit;
   font-size: 14px;
 }
 
-.field input {
+.field input,
+.field textarea {
   caret-color: var(--ark-accent);
 }
 
@@ -152,13 +156,43 @@ h1 {
   color: #786e7e;
 }
 
-.field input:hover {
+.field input:hover,
+.field textarea:hover {
   border-color: var(--ark-accent);
+}
+
+.field textarea {
+  min-height: 180px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.field-heading {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.text-button {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  color: var(--ark-accent);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.text-button:hover {
+  color: var(--ark-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 9px;
 }
 

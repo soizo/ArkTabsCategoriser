@@ -100,6 +100,14 @@
             >
               Load models
             </button>
+            <button
+              id="test-model"
+              class="secondary-button"
+              type="button"
+              data-i18n="testModel"
+            >
+              Test model
+            </button>
           </div>
           <label
             id="model-picker-label"
@@ -116,6 +124,37 @@
           ></select>
           <p class="field-help" data-i18n="modelHelp">
             Choose from the loaded list or type any model ID.
+          </p>
+          <p class="field-help" data-i18n="modelTestCost">
+            Testing sends a minimal generation request and may incur a small
+            charge.
+          </p>
+        </div>
+
+        <div class="field">
+          <div class="field-heading">
+            <label for="system-prompt" data-i18n="systemPrompt"
+              >System prompt</label
+            >
+            <button
+              id="reset-prompt"
+              class="text-button"
+              type="button"
+              data-i18n="restoreDefaultPrompt"
+            >
+              Restore default
+            </button>
+          </div>
+          <textarea
+            id="system-prompt"
+            name="systemPrompt"
+            rows="9"
+            required
+            spellcheck="true"
+          ></textarea>
+          <p class="field-help" data-i18n="systemPromptHelp">
+            Ark sends this instruction with tab titles and URLs. Invalid output
+            is rejected before tabs change.
           </p>
         </div>
 

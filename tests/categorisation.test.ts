@@ -154,4 +154,28 @@ describe("buildCategorisationPrompt", () => {
     expect(prompt.user).not.toContain("987");
     expect(prompt.user).not.toContain("654");
   });
+
+  it("uses an edited system prompt without changing the tab payload", () => {
+    const tabs: TabInput[] = [
+      {
+        id: "t0",
+        chromeTabId: 987,
+        title: "WXT documentation",
+        url: "https://wxt.dev/guide",
+      },
+    ];
+
+    expect(buildCategorisationPrompt(tabs, "en", "My complete prompt")).toEqual(
+      {
+        system: "My complete prompt",
+        user: JSON.stringify([
+          {
+            id: "t0",
+            title: "WXT documentation",
+            url: "https://wxt.dev/guide",
+          },
+        ]),
+      },
+    );
+  });
 });

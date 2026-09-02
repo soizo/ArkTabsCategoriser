@@ -12,7 +12,12 @@ Ark has no model service, proxy, account, analytics, or backend. Requests go dir
 - OpenRouter
 - Custom OpenAI-compatible APIs
 
-The model field is editable. You can load a provider's model list or type any model ID directly.
+The model field is editable. You can load a provider's model list or type any
+model ID directly. The system prompt is also editable in settings.
+
+The Popup can test the saved active model. Settings can test the current draft
+before it is saved. Each test sends a minimal real generation request and may
+incur a small provider charge.
 
 ## Privacy
 
@@ -61,10 +66,16 @@ The unpacked build is generated under `.output/chrome-mv3/`. WXT also creates th
 2. Select a provider.
 3. Enter its API key.
 4. Load the model list or type a model ID.
-5. For Custom, enter the OpenAI-compatible base URL including any version path, such as `https://llm.example/v1`.
-6. Save settings and approve access to that API origin.
+5. Edit the system prompt if you want different categorisation instructions.
+6. For Custom, enter the OpenAI-compatible base URL including any version path, such as `https://llm.example/v1`.
+7. Save settings and approve access to that API origin.
 
-Open Ark from Chrome's toolbar and select **Organise tabs**. Ark validates that every eligible tab appears exactly once across generated groups and explicitly ungrouped tabs, then confirms the tab set has not changed before modifying groups.
+Open Ark from Chrome's toolbar, choose any configured provider/model, and select **Organise tabs**. Ark validates that every eligible tab appears exactly once across generated groups and explicitly ungrouped tabs, then confirms the tab set has not changed before modifying groups.
+
+When OpenRouter returns displayable reasoning while organising, the Popup shows
+it as a transient live panel. Ark does not store or log that reasoning, hides
+the panel when no reasoning is returned, and does not display reasoning from
+other providers in this iteration.
 
 ## Checks
 

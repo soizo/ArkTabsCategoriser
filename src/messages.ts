@@ -5,20 +5,49 @@ import type { ArkSettings } from "./settings";
 
 export type RuntimeMessage =
   | { type: "popupState" }
-  | { type: "organise" }
-  | { type: "openOptions" };
+  | { type: "testModel" }
+  | { type: "openOptions" }
+  | { type: "activateProvider"; provider: ProviderId };
 
 export type RuntimeResponse =
-  | { ok: true; count: number; provider?: ProviderId; model?: string }
-  | { ok: true; groupCount: number; ungroupedCount: number }
+  | {
+      ok: true;
+      count: number;
+      provider?: ProviderId;
+      model?: string;
+      configuredProviders: { provider: ProviderId; model: string }[];
+    }
   | { ok: true }
   | { ok: false; errorCode: ArkErrorCode };
 
 export type MessageDeps = {
   loadSettings(): Promise<ArkSettings>;
   queryTabs(): Promise<BrowserTab[]>;
-  organise(): Promise<{ groupCount: number; ungroupedCount: number }>;
+  testModel(): Promise<void>;
   openOptions(): Promise<void>;
+  activateProvider(provider: ProviderId): Promise<void>;
+};
+
+export type OrganisePortOutbound =
+  | { type: "reasoning"; text: string }
+  | { type: "complete"; groupCount: number; ungroupedCount: number }
+  | { type: "error"; errorCode: ArkErrorCode };
+
+export type OrganisePort = {
+  name: string;
+  postMessage(message: OrganisePortOutbound): void;
+  onMessage: {
+    addListener(listener: (message: unknown) => void): void;
+  };
+  onDisconnect: {
+    addListener(listener: () => void): void;
+  };
+};
+
+export type OrganisePortDeps = {
+  organise(
+    onReasoning: (text: string) => void,
+  ): Promise<{ groupCount: number; ungroupedCount: number }>;
 };
 
 export function createMessageHandler(
@@ -32,10 +61,22 @@ export function createMessageHandler(
       ]);
       const provider = settings.activeProvider;
       const model = provider ? settings.providers[provider]?.model : undefined;
+      const configuredProviders = Object.entries(settings.providers).flatMap(
+        ([configuredProvider, configuredSettings]) =>
+          configuredSettings
+            ? [
+                {
+                  provider: configuredProvider as ProviderId,
+                  model: configuredSettings.model,
+                },
+              ]
+            : [],
+      );
       return {
         ok: true,
         count: tabs.filter(({ pinned }) => !pinned).length,
         ...(provider && model ? { provider, model } : {}),
+        configuredProviders,
       };
     }
 
@@ -44,14 +85,69 @@ export function createMessageHandler(
       return { ok: true };
     }
 
-    try {
-      const { groupCount, ungroupedCount } = await deps.organise();
-      return { ok: true, groupCount, ungroupedCount };
-    } catch (error) {
-      return {
-        ok: false,
-        errorCode: error instanceof ArkError ? error.code : "network",
-      };
+    if (message.type === "activateProvider") {
+      await deps.activateProvider(message.provider);
+      return { ok: true };
     }
+
+    if (message.type === "testModel") {
+      try {
+        await deps.testModel();
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          errorCode: error instanceof ArkError ? error.code : "network",
+        };
+      }
+    }
+
+    return { ok: false, errorCode: "network" };
+  };
+}
+
+export function createOrganisePortHandler(
+  deps: OrganisePortDeps,
+): (port: OrganisePort) => void {
+  return (port) => {
+    let connected = true;
+    let started = false;
+
+    function post(message: OrganisePortOutbound): void {
+      if (!connected) return;
+      try {
+        port.postMessage(message);
+      } catch {
+        connected = false;
+      }
+    }
+
+    port.onDisconnect.addListener(() => {
+      connected = false;
+    });
+    port.onMessage.addListener((message) => {
+      if (
+        started ||
+        typeof message !== "object" ||
+        message === null ||
+        (message as { type?: unknown }).type !== "start"
+      ) {
+        return;
+      }
+      started = true;
+      void (async () => {
+        try {
+          const result = await deps.organise((text) => {
+            if (text) post({ type: "reasoning", text });
+          });
+          post({ type: "complete", ...result });
+        } catch (error) {
+          post({
+            type: "error",
+            errorCode: error instanceof ArkError ? error.code : "network",
+          });
+        }
+      })();
+    });
   };
 }

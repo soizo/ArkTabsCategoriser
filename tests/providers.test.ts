@@ -24,6 +24,30 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function sseResponse(...events: unknown[]): Response {
+  const encoder = new TextEncoder();
+  const payload = events
+    .map((event) =>
+      event === "[DONE]"
+        ? "data: [DONE]\n\n"
+        : `data: ${JSON.stringify(event)}\n\n`,
+    )
+    .join("");
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(payload.slice(0, 17)));
+        controller.enqueue(encoder.encode(payload.slice(17)));
+        controller.close();
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    },
+  );
+}
+
 function fetchSequence(
   ...responses: Response[]
 ): ReturnType<typeof vi.fn<Fetch>> {
@@ -43,6 +67,26 @@ function requestAt(
 }
 
 describe("OpenAI-compatible providers", () => {
+  it("tests an OpenRouter model with a minimal generation", async () => {
+    const fetchMock = fetchSequence(
+      jsonResponse({ choices: [{ message: { content: "OK" } }] }),
+    );
+
+    await expect(
+      getProvider("openrouter", fetchMock).testConnection(
+        settings,
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(JSON.parse(String(requestAt(fetchMock, 0)[1].body))).toEqual({
+      model: "model-id",
+      messages: [{ role: "user", content: "Reply with OK." }],
+      max_tokens: 8,
+      temperature: 0,
+    });
+  });
+
   it("lists and categorises with OpenAI structured output", async () => {
     const fetchMock = fetchSequence(
       jsonResponse({
@@ -60,17 +104,28 @@ describe("OpenAI-compatible providers", () => {
       provider.listModels(settings, new AbortController().signal),
     ).resolves.toEqual(["gpt-a", "gpt-z"]);
     await expect(
-      provider.categorise(settings, tabs, "en", new AbortController().signal),
+      provider.categorise(
+        settings,
+        tabs,
+        "en",
+        new AbortController().signal,
+        "My complete prompt",
+      ),
     ).resolves.toEqual(JSON.parse(categorisationText));
 
     expect(requestAt(fetchMock, 0)[0]).toBe("https://api.openai.com/v1/models");
     const [url, init] = requestAt(fetchMock, 1);
     expect(url).toBe("https://api.openai.com/v1/chat/completions");
     expect(init.headers).toMatchObject({ Authorization: "Bearer secret-key" });
-    expect(JSON.parse(String(init.body))).toMatchObject({
+    const body = JSON.parse(String(init.body));
+    expect(body).toMatchObject({
       model: "model-id",
       temperature: 0,
       response_format: { type: "json_object" },
+    });
+    expect(body.messages[0]).toEqual({
+      role: "system",
+      content: "My complete prompt",
     });
   });
 
@@ -105,6 +160,162 @@ describe("OpenAI-compatible providers", () => {
     expect(JSON.parse(String(init.body))).not.toHaveProperty("response_format");
   });
 
+  it("streams OpenRouter reasoning while accumulating final JSON", async () => {
+    const reasoning: string[] = [];
+    const fetchMock = fetchSequence(
+      sseResponse(
+        {
+          choices: [
+            {
+              delta: {
+                reasoning_details: [
+                  {
+                    type: "reasoning.summary",
+                    summary: "Compare subjects. ",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                reasoning_details: [
+                  {
+                    type: "reasoning.text",
+                    text: "Keep docs together.",
+                  },
+                ],
+                content: categorisationText,
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: {}, finish_reason: "stop" }], usage: {} },
+        "[DONE]",
+      ),
+    );
+
+    await expect(
+      getProvider("openrouter", fetchMock).categorise(
+        settings,
+        tabs,
+        "en",
+        new AbortController().signal,
+        undefined,
+        (text) => reasoning.push(text),
+      ),
+    ).resolves.toEqual(JSON.parse(categorisationText));
+
+    expect(reasoning).toEqual(["Compare subjects. ", "Keep docs together."]);
+    expect(JSON.parse(String(requestAt(fetchMock, 0)[1].body))).toMatchObject({
+      stream: true,
+    });
+  });
+
+  it("supports legacy reasoning and ignores non-displayable details", async () => {
+    const reasoning: string[] = [];
+    const provider = getProvider(
+      "openrouter",
+      fetchSequence(
+        sseResponse(
+          {
+            choices: [
+              {
+                delta: {
+                  reasoning: "Legacy thought.",
+                  reasoning_details: [
+                    { type: "reasoning.encrypted", data: "ciphertext" },
+                    { type: "reasoning.text", text: "" },
+                  ],
+                  content: categorisationText,
+                },
+              },
+            ],
+          },
+          { choices: [{ delta: {}, finish_reason: "stop" }], usage: {} },
+          "[DONE]",
+        ),
+      ),
+    );
+
+    await provider.categorise(
+      settings,
+      tabs,
+      "en",
+      new AbortController().signal,
+      undefined,
+      (text) => reasoning.push(text),
+    );
+    expect(reasoning).toEqual(["Legacy thought."]);
+  });
+
+  it("maps a mid-stream OpenRouter 403 without exposing its body", async () => {
+    const provider = getProvider(
+      "openrouter",
+      fetchSequence(
+        sseResponse(
+          { error: { code: 403, message: "private moderation detail" } },
+          "[DONE]",
+        ),
+      ),
+    );
+
+    await expect(
+      provider.categorise(
+        settings,
+        tabs,
+        "en",
+        new AbortController().signal,
+        undefined,
+        () => {},
+      ),
+    ).rejects.toMatchObject({ code: "forbidden", message: "forbidden" });
+  });
+
+  it("rejects an OpenRouter stream without final content", async () => {
+    const provider = getProvider(
+      "openrouter",
+      fetchSequence(sseResponse({ choices: [{ delta: {} }] }, "[DONE]")),
+    );
+
+    await expect(
+      provider.categorise(
+        settings,
+        tabs,
+        "en",
+        new AbortController().signal,
+        undefined,
+        () => {},
+      ),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  it("keeps direct OpenAI non-streaming when a callback is supplied", async () => {
+    const fetchMock = fetchSequence(
+      jsonResponse({
+        choices: [{ message: { content: categorisationText } }],
+      }),
+    );
+    const onReasoning = vi.fn();
+
+    await getProvider("openai", fetchMock).categorise(
+      settings,
+      tabs,
+      "en",
+      new AbortController().signal,
+      undefined,
+      onReasoning,
+    );
+
+    expect(
+      JSON.parse(String(requestAt(fetchMock, 0)[1].body)),
+    ).not.toHaveProperty("stream");
+    expect(onReasoning).not.toHaveBeenCalled();
+  });
+
   it("appends compatible paths to a custom versioned base URL", async () => {
     const fetchMock = fetchSequence(
       jsonResponse({ data: [{ id: "local-model" }] }),
@@ -131,6 +342,25 @@ describe("OpenAI-compatible providers", () => {
 });
 
 describe("Anthropic provider", () => {
+  it("tests a model with a minimal generation", async () => {
+    const fetchMock = fetchSequence(
+      jsonResponse({ content: [{ type: "text", text: "OK" }] }),
+    );
+
+    await expect(
+      getProvider("anthropic", fetchMock).testConnection(
+        settings,
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(JSON.parse(String(requestAt(fetchMock, 0)[1].body))).toMatchObject({
+      model: "model-id",
+      max_tokens: 8,
+      messages: [{ role: "user", content: "Reply with OK." }],
+    });
+  });
+
   it("maps model and Messages API responses", async () => {
     const fetchMock = fetchSequence(
       jsonResponse({
@@ -183,6 +413,26 @@ describe("Anthropic provider", () => {
 });
 
 describe("Gemini provider", () => {
+  it("tests a model with a minimal generation", async () => {
+    const fetchMock = fetchSequence(
+      jsonResponse({
+        candidates: [{ content: { parts: [{ text: "OK" }] } }],
+      }),
+    );
+
+    await expect(
+      getProvider("gemini", fetchMock).testConnection(
+        settings,
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(JSON.parse(String(requestAt(fetchMock, 0)[1].body))).toMatchObject({
+      contents: [{ role: "user", parts: [{ text: "Reply with OK." }] }],
+      generationConfig: { maxOutputTokens: 8, temperature: 0 },
+    });
+  });
+
   it("maps model and generateContent responses", async () => {
     const fetchMock = fetchSequence(
       jsonResponse({
@@ -231,9 +481,20 @@ describe("Gemini provider", () => {
 });
 
 describe("provider errors", () => {
+  it("rejects an empty connection-test response", async () => {
+    const provider = getProvider(
+      "openrouter",
+      fetchSequence(jsonResponse({ choices: [{ message: { content: "" } }] })),
+    );
+
+    await expect(
+      provider.testConnection(settings, new AbortController().signal),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
   it.each([
     [401, "unauthorised"],
-    [403, "unauthorised"],
+    [403, "forbidden"],
     [429, "rate_limited"],
     [500, "network"],
   ] as const)("maps HTTP %s to %s", async (status, code) => {

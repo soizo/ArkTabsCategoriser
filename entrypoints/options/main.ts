@@ -1,4 +1,5 @@
 import "./style.css";
+import { defaultSystemPrompt } from "../../src/categorisation";
 import { ArkError } from "../../src/errors";
 import { localiseDocument, msg, type MessageKey } from "../../src/i18n";
 import {
@@ -38,7 +39,10 @@ const modelInput = required<HTMLInputElement>("#model");
 const modelPicker = required<HTMLSelectElement>("#model-picker");
 const modelPickerLabel = required<HTMLLabelElement>("#model-picker-label");
 const loadModelsButton = required<HTMLButtonElement>("#load-models");
+const testModelButton = required<HTMLButtonElement>("#test-model");
 const saveButton = required<HTMLButtonElement>("#save-settings");
+const systemPromptInput = required<HTMLTextAreaElement>("#system-prompt");
+const resetPromptButton = required<HTMLButtonElement>("#reset-prompt");
 const status = required<HTMLElement>("#settings-status");
 const providerInputs = [
   ...document.querySelectorAll<HTMLInputElement>('input[name="provider"]'),
@@ -89,6 +93,7 @@ function errorKey(error: unknown): MessageKey {
   const keys: Partial<Record<ArkError["code"], MessageKey>> = {
     permission_denied: "permissionDenied",
     unauthorised: "unauthorised",
+    forbidden: "modelForbidden",
     rate_limited: "rateLimited",
     timeout: "requestTimeout",
     invalid_response: "invalidProviderResponse",
@@ -101,9 +106,12 @@ async function runWithTimeout<T>(
   operation: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
     return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new ArkError("timeout");
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -120,6 +128,11 @@ for (const input of providerInputs) {
 
 modelPicker.addEventListener("change", () => {
   if (modelPicker.value) modelInput.value = modelPicker.value;
+});
+
+resetPromptButton.addEventListener("click", () => {
+  systemPromptInput.value = defaultSystemPrompt(browser.i18n.getUILanguage());
+  setStatus("");
 });
 
 loadModelsButton.addEventListener("click", async () => {
@@ -164,6 +177,34 @@ loadModelsButton.addEventListener("click", async () => {
   }
 });
 
+testModelButton.addEventListener("click", async () => {
+  const providerSettings = readDraft();
+  if (
+    !providerSettings.apiKey ||
+    !providerSettings.model ||
+    (selected === "custom" && !providerSettings.baseUrl)
+  ) {
+    setStatus("invalidSettings", "error");
+    return;
+  }
+
+  testModelButton.disabled = true;
+  loadModelsButton.disabled = true;
+  setStatus("testingModel");
+  try {
+    await requestProviderPermission(permissions, selected, providerSettings);
+    await runWithTimeout((signal) =>
+      getProvider(selected).testConnection(providerSettings, signal),
+    );
+    setStatus("modelTestSucceeded", "success");
+  } catch (error) {
+    setStatus(errorKey(error), "error");
+  } finally {
+    testModelButton.disabled = false;
+    loadModelsButton.disabled = false;
+  }
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!form.reportValidity()) return;
@@ -172,7 +213,12 @@ form.addEventListener("submit", async (event) => {
   saveButton.disabled = true;
   try {
     await requestProviderPermission(permissions, selected, providerSettings);
-    const saved = await saveProvider(storage, selected, providerSettings);
+    const saved = await saveProvider(
+      storage,
+      selected,
+      providerSettings,
+      systemPromptInput.value,
+    );
     drafts = { ...saved.providers };
     setStatus("settingsSaved", "success");
   } catch (error) {
@@ -189,4 +235,6 @@ localiseDocument();
 const stored = await loadSettings(storage);
 drafts = { ...stored.providers };
 selected = stored.activeProvider ?? "openai";
+systemPromptInput.value =
+  stored.systemPrompt ?? defaultSystemPrompt(browser.i18n.getUILanguage());
 renderProvider();

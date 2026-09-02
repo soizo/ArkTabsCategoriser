@@ -1,17 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ArkError } from "../src/errors";
-import { createMessageHandler, type MessageDeps } from "../src/messages";
+import {
+  createMessageHandler,
+  createOrganisePortHandler,
+  type MessageDeps,
+} from "../src/messages";
 import type { BrowserTab } from "../src/grouping";
+import type { ProviderId } from "../src/domain";
 import type { ArkSettings } from "../src/settings";
 
 function deps(
   options: {
     settings?: ArkSettings;
     tabs?: BrowserTab[];
-    organise?: MessageDeps["organise"];
+    testModel?: () => Promise<void>;
   } = {},
-): MessageDeps & { opened: boolean } {
-  const subject: MessageDeps & { opened: boolean } = {
+): MessageDeps & { opened: boolean; activated?: ProviderId } {
+  const subject: MessageDeps & { opened: boolean; activated?: ProviderId } = {
     opened: false,
     async loadSettings() {
       return options.settings ?? { providers: {} };
@@ -19,14 +24,12 @@ function deps(
     async queryTabs() {
       return options.tabs ?? [];
     },
-    organise:
-      options.organise ??
-      (async () => ({
-        groupCount: 2,
-        ungroupedCount: 3,
-      })),
+    testModel: options.testModel ?? (async () => {}),
     async openOptions() {
       subject.opened = true;
+    },
+    async activateProvider(provider) {
+      subject.activated = provider;
     },
   };
   return subject;
@@ -38,6 +41,7 @@ describe("background messages", () => {
       settings: {
         activeProvider: "openrouter",
         providers: {
+          openai: { apiKey: "openai-key", model: "gpt-4.1" },
           openrouter: { apiKey: "key", model: "anthropic/claude-sonnet-4" },
         },
       },
@@ -68,7 +72,23 @@ describe("background messages", () => {
       count: 1,
       provider: "openrouter",
       model: "anthropic/claude-sonnet-4",
+      configuredProviders: [
+        { provider: "openai", model: "gpt-4.1" },
+        { provider: "openrouter", model: "anthropic/claude-sonnet-4" },
+      ],
     });
+  });
+
+  it("activates a configured provider from the popup", async () => {
+    const subject = deps();
+
+    await expect(
+      createMessageHandler(subject)({
+        type: "activateProvider",
+        provider: "gemini",
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(subject.activated).toBe("gemini");
   });
 
   it("opens the extension options page", async () => {
@@ -80,28 +100,147 @@ describe("background messages", () => {
     expect(subject.opened).toBe(true);
   });
 
-  it("returns the numbers of created groups and ungrouped tabs", async () => {
-    await expect(
-      createMessageHandler(deps())({ type: "organise" }),
-    ).resolves.toEqual({
-      ok: true,
-      groupCount: 2,
-      ungroupedCount: 3,
-    });
-  });
-
-  it("returns only a stable Ark error code", async () => {
+  it("tests the active model", async () => {
+    let tested = false;
     const subject = deps({
-      organise: async () => {
-        throw new ArkError("rate_limited", "private provider response");
+      testModel: async () => {
+        tested = true;
       },
     });
 
     await expect(
-      createMessageHandler(subject)({ type: "organise" }),
+      createMessageHandler(subject)({ type: "testModel" }),
+    ).resolves.toEqual({ ok: true });
+    expect(tested).toBe(true);
+  });
+
+  it("returns only a stable model-test error code", async () => {
+    const subject = deps({
+      testModel: async () => {
+        throw new ArkError("forbidden", "private provider response");
+      },
+    });
+
+    await expect(
+      createMessageHandler(subject)({ type: "testModel" }),
     ).resolves.toEqual({
       ok: false,
-      errorCode: "rate_limited",
+      errorCode: "forbidden",
     });
+  });
+});
+
+function fakePort() {
+  const messageListeners: Array<(message: unknown) => void> = [];
+  const disconnectListeners: Array<() => void> = [];
+  const posted: unknown[] = [];
+  return {
+    port: {
+      name: "organise",
+      postMessage(message: unknown) {
+        posted.push(message);
+      },
+      onMessage: {
+        addListener(listener: (message: unknown) => void) {
+          messageListeners.push(listener);
+        },
+      },
+      onDisconnect: {
+        addListener(listener: () => void) {
+          disconnectListeners.push(listener);
+        },
+      },
+    },
+    posted,
+    start() {
+      for (const listener of messageListeners) listener({ type: "start" });
+    },
+    disconnect() {
+      for (const listener of disconnectListeners) listener();
+    },
+  };
+}
+
+describe("organisation port", () => {
+  it("posts reasoning and completion", async () => {
+    const subject = fakePort();
+    createOrganisePortHandler({
+      organise: async (onReasoning) => {
+        onReasoning("Thinking.");
+        return { groupCount: 2, ungroupedCount: 1 };
+      },
+    })(subject.port);
+
+    subject.start();
+
+    await vi.waitFor(() =>
+      expect(subject.posted).toEqual([
+        { type: "reasoning", text: "Thinking." },
+        { type: "complete", groupCount: 2, ungroupedCount: 1 },
+      ]),
+    );
+  });
+
+  it("posts only a stable error code", async () => {
+    const subject = fakePort();
+    createOrganisePortHandler({
+      organise: async () => {
+        throw new ArkError("forbidden", "private provider detail");
+      },
+    })(subject.port);
+
+    subject.start();
+
+    await vi.waitFor(() =>
+      expect(subject.posted).toEqual([
+        { type: "error", errorCode: "forbidden" },
+      ]),
+    );
+  });
+
+  it("starts organisation only once", async () => {
+    const subject = fakePort();
+    let calls = 0;
+    createOrganisePortHandler({
+      organise: async () => {
+        calls += 1;
+        return { groupCount: 1, ungroupedCount: 0 };
+      },
+    })(subject.port);
+
+    subject.start();
+    subject.start();
+
+    await vi.waitFor(() => expect(calls).toBe(1));
+  });
+
+  it("continues safely but stops posting after disconnect", async () => {
+    const subject = fakePort();
+    let emit = (_text: string): void => {};
+    let finish = (_value: {
+      groupCount: number;
+      ungroupedCount: number;
+    }): void => {};
+    const completed = new Promise<{
+      groupCount: number;
+      ungroupedCount: number;
+    }>((resolve) => {
+      finish = resolve;
+    });
+    createOrganisePortHandler({
+      organise: async (onReasoning) => {
+        emit = onReasoning;
+        return completed;
+      },
+    })(subject.port);
+
+    subject.start();
+    subject.disconnect();
+    emit("hidden");
+    finish({ groupCount: 1, ungroupedCount: 0 });
+    await completed;
+    await Promise.resolve();
+
+    expect(subject.posted).toEqual([]);
   });
 });

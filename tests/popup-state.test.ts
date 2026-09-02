@@ -60,6 +60,23 @@ describe("popupView", () => {
     });
   });
 
+  it("disables organisation while testing the model", () => {
+    expect(
+      popupView({
+        kind: "testing",
+        count: 8,
+        provider: "OpenRouter",
+        model: "openrouter/free",
+      }),
+    ).toMatchObject({
+      model: "OpenRouter · openrouter/free",
+      buttonKey: "organiseTabs",
+      statusKey: "testingModel",
+      buttonDisabled: true,
+      busy: true,
+    });
+  });
+
   it("reports grouped and ungrouped counts after success", () => {
     expect(
       popupView({
@@ -79,6 +96,7 @@ describe("popupView", () => {
   it.each([
     ["permission_denied", "permissionDenied"],
     ["unauthorised", "unauthorised"],
+    ["forbidden", "modelForbidden"],
     ["rate_limited", "rateLimited"],
     ["timeout", "requestTimeout"],
     ["invalid_response", "invalidProviderResponse"],

@@ -20,6 +20,7 @@ export type OrganiseDeps = {
   providerFor(id: ProviderId): Provider;
   locale: string;
   timeoutMs?: number;
+  onReasoning?: (text: string) => void;
 };
 
 function isAbort(error: unknown, signal: AbortSignal): boolean {
@@ -48,16 +49,24 @@ async function requestCategorisation(
   providerId: ProviderId,
   settings: ProviderSettings,
   tabs: TabInput[],
+  systemPrompt?: string,
 ): Promise<Categorisation> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    deps.timeoutMs ?? 30_000,
+    deps.timeoutMs ?? 60_000,
   );
   try {
     return await deps
       .providerFor(providerId)
-      .categorise(settings, tabs, deps.locale, controller.signal);
+      .categorise(
+        settings,
+        tabs,
+        deps.locale,
+        controller.signal,
+        systemPrompt,
+        deps.onReasoning,
+      );
   } catch (error) {
     if (isAbort(error, controller.signal)) throw new ArkError("timeout");
     if (error instanceof ArkError) throw error;
@@ -100,6 +109,7 @@ export async function organiseTabs(
     providerId,
     settings,
     eligible,
+    stored.systemPrompt,
   );
   await applyResult(deps.tabs, eligible, result);
   return {

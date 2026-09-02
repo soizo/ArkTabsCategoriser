@@ -1,10 +1,20 @@
 import { defineBackground } from "wxt/utils/define-background";
 import type { BrowserGroup, BrowserTab, TabsPort } from "../src/grouping";
-import { createMessageHandler, type RuntimeMessage } from "../src/messages";
+import {
+  createMessageHandler,
+  createOrganisePortHandler,
+  type OrganisePort,
+  type RuntimeMessage,
+} from "../src/messages";
+import { testActiveModel } from "../src/model-test";
 import { organiseTabs } from "../src/organise";
 import type { PermissionsPort } from "../src/permissions";
 import { getProvider } from "../src/providers";
-import { loadSettings, type StorageArea } from "../src/settings";
+import {
+  activateProvider,
+  loadSettings,
+  type StorageArea,
+} from "../src/settings";
 
 const storage: StorageArea = {
   get: (key) => browser.storage.local.get(key),
@@ -59,23 +69,38 @@ const tabs: TabsPort = {
 };
 
 export default defineBackground(() => {
-  const organise = () =>
+  const organise = (onReasoning?: (text: string) => void) =>
     organiseTabs({
       storage,
       permissions,
       tabs,
       providerFor: getProvider,
       locale: browser.i18n.getUILanguage(),
+      ...(onReasoning ? { onReasoning } : {}),
     });
+  const handleOrganisePort = createOrganisePortHandler({ organise });
 
   const handleMessage = createMessageHandler({
     loadSettings: () => loadSettings(storage),
     queryTabs: () => tabs.queryCurrentWindow(),
-    organise,
+    testModel: () =>
+      testActiveModel({
+        storage,
+        permissions,
+        providerFor: getProvider,
+      }),
     openOptions: () => browser.runtime.openOptionsPage(),
+    activateProvider: async (provider) => {
+      await activateProvider(storage, provider);
+    },
   });
 
   browser.runtime.onMessage.addListener((message: unknown) => {
     return handleMessage(message as RuntimeMessage);
+  });
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name === "organise") {
+      handleOrganisePort(port as OrganisePort);
+    }
   });
 });
