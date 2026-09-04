@@ -82,9 +82,30 @@ describe("OpenAI-compatible providers", () => {
     expect(JSON.parse(String(requestAt(fetchMock, 0)[1].body))).toEqual({
       model: "model-id",
       messages: [{ role: "user", content: "Reply with OK." }],
-      max_tokens: 8,
+      max_tokens: 256,
       temperature: 0,
     });
+  });
+
+  it("leaves output room for reasoning models in connection tests", async () => {
+    const fetchMock = vi.fn<Fetch>(async (_input, init = {}) => {
+      const body = JSON.parse(String(init.body));
+      return jsonResponse({
+        choices: [
+          {
+            message: { content: body.max_tokens >= 256 ? "OK" : "" },
+            finish_reason: body.max_tokens >= 256 ? "stop" : "length",
+          },
+        ],
+      });
+    });
+
+    await expect(
+      getProvider("custom", fetchMock).testConnection(
+        { ...settings, baseUrl: "https://api.groq.com/openai/v1" },
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("lists and categorises with OpenAI structured output", async () => {

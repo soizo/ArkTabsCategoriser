@@ -186,7 +186,7 @@ export function createOpenAICompatibleProvider(
           body: JSON.stringify({
             model: settings.model,
             messages: [{ role: "user", content: "Reply with OK." }],
-            max_tokens: 8,
+            max_tokens: 256,
             temperature: 0,
           }),
         },
