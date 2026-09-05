@@ -1,8 +1,14 @@
 import type { Categorisation, CategoryGroup, Prompt, TabInput } from "./domain";
 import { ArkError } from "./errors";
 
-function invalidResponse(): never {
-  throw new ArkError("invalid_response");
+function invalidResponse(
+  context = "Categorisation response did not match the required schema",
+): never {
+  throw new ArkError("invalid_response", {
+    stage: "validation",
+    reason: "invalid_categorisation",
+    context,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -17,7 +23,7 @@ export function parseCategorisation(
   try {
     value = JSON.parse(text);
   } catch {
-    return invalidResponse();
+    return invalidResponse("Categorisation response was not valid JSON");
   }
 
   if (
@@ -25,22 +31,23 @@ export function parseCategorisation(
     !Array.isArray(value.groups) ||
     !Array.isArray(value.ungroupedTabIds)
   )
-    invalidResponse();
-  if (value.groups.length > 8) invalidResponse();
+    invalidResponse("Expected groups and ungroupedTabIds arrays");
+  if (value.groups.length > 8)
+    invalidResponse("Categorisation contained more than 8 groups");
 
   const expected = new Set(expectedTabIds);
   const seen = new Set<string>();
   const groups: CategoryGroup[] = value.groups.map((group): CategoryGroup => {
-    if (!isRecord(group)) invalidResponse();
+    if (!isRecord(group)) invalidResponse("A group was not an object");
 
     const name = typeof group.name === "string" ? group.name.trim() : "";
     if (!name || !Array.isArray(group.tabIds) || group.tabIds.length === 0) {
-      invalidResponse();
+      invalidResponse("A group name or tab ID list was missing");
     }
 
     const tabIds = group.tabIds.map((id): string => {
       if (typeof id !== "string" || !expected.has(id) || seen.has(id)) {
-        invalidResponse();
+        invalidResponse("A tab ID was unknown or repeated");
       }
       seen.add(id);
       return id;
@@ -51,13 +58,14 @@ export function parseCategorisation(
 
   const ungroupedTabIds = value.ungroupedTabIds.map((id): string => {
     if (typeof id !== "string" || !expected.has(id) || seen.has(id)) {
-      invalidResponse();
+      invalidResponse("A tab ID was unknown or repeated");
     }
     seen.add(id);
     return id;
   });
 
-  if (seen.size !== expected.size) invalidResponse();
+  if (seen.size !== expected.size)
+    invalidResponse("One or more tab IDs were missing");
   return { groups, ungroupedTabIds };
 }
 

@@ -1,5 +1,8 @@
 import type { ProviderId } from "./domain";
-import { ArkError, type ArkErrorCode } from "./errors";
+import {
+  errorPayload,
+  type ArkErrorPayload,
+} from "./errors";
 import type { BrowserTab } from "./grouping";
 import type { ArkSettings } from "./settings";
 
@@ -18,7 +21,7 @@ export type RuntimeResponse =
       configuredProviders: { provider: ProviderId; model: string }[];
     }
   | { ok: true }
-  | { ok: false; errorCode: ArkErrorCode };
+  | ({ ok: false } & ArkErrorPayload);
 
 export type MessageDeps = {
   loadSettings(): Promise<ArkSettings>;
@@ -31,7 +34,7 @@ export type MessageDeps = {
 export type OrganisePortOutbound =
   | { type: "reasoning"; text: string }
   | { type: "complete"; groupCount: number; ungroupedCount: number }
-  | { type: "error"; errorCode: ArkErrorCode };
+  | ({ type: "error" } & ArkErrorPayload);
 
 export type OrganisePort = {
   name: string;
@@ -97,7 +100,10 @@ export function createMessageHandler(
       } catch (error) {
         return {
           ok: false,
-          errorCode: error instanceof ArkError ? error.code : "network",
+          ...errorPayload(error, "network", {
+            stage: "request",
+            reason: "request_failed",
+          }),
         };
       }
     }
@@ -144,7 +150,10 @@ export function createOrganisePortHandler(
         } catch (error) {
           post({
             type: "error",
-            errorCode: error instanceof ArkError ? error.code : "network",
+            ...errorPayload(error, "network", {
+              stage: "transport",
+              reason: "request_failed",
+            }),
           });
         }
       })();

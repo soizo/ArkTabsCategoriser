@@ -25,7 +25,11 @@ function headers(settings: ProviderSettings): Record<string, string> {
 
 function modelIds(value: unknown): string[] {
   if (!isRecord(value) || !Array.isArray(value.data)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_models",
+      context: "Expected data to contain a model list",
+    });
   }
   return uniqueModels(
     value.data.flatMap((item) => {
@@ -36,7 +40,11 @@ function modelIds(value: unknown): string[] {
 
 function messageText(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.content)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Anthropic response text was empty",
+    });
   }
   const text = value.content
     .filter(
@@ -46,7 +54,12 @@ function messageText(value: unknown): string {
     .map((item) => item.text)
     .filter((item): item is string => typeof item === "string")
     .join("");
-  if (!text) throw new ArkError("invalid_response");
+  if (!text)
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Anthropic response text was empty",
+    });
   return text;
 }
 

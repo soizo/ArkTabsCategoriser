@@ -505,12 +505,23 @@ describe("provider errors", () => {
   it("rejects an empty connection-test response", async () => {
     const provider = getProvider(
       "openrouter",
-      fetchSequence(jsonResponse({ choices: [{ message: { content: "" } }] })),
+      fetchSequence(
+        jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+        }),
+      ),
     );
 
     await expect(
       provider.testConnection(settings, new AbortController().signal),
-    ).rejects.toMatchObject({ code: "invalid_response" });
+    ).rejects.toMatchObject({
+      code: "invalid_response",
+      diagnostic: {
+        stage: "response",
+        reason: "missing_content",
+        context: "choices[0].message.content was empty; finish_reason=length",
+      },
+    });
   });
 
   it.each([
@@ -527,7 +538,34 @@ describe("provider errors", () => {
     );
     await expect(
       provider.listModels(settings, new AbortController().signal),
-    ).rejects.toMatchObject({ code });
+    ).rejects.toMatchObject({
+      code,
+      diagnostic: {
+        stage: "response",
+        reason: "http_error",
+        status,
+        origin: "https://api.openai.com",
+        providerMessage: "private provider text",
+      },
+    });
+  });
+
+  it("reports invalid JSON without exposing the response body", async () => {
+    const provider = getProvider(
+      "openai",
+      fetchSequence(new Response("private non-json body", { status: 200 })),
+    );
+
+    await expect(
+      provider.listModels(settings, new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "invalid_response",
+      diagnostic: {
+        stage: "response",
+        reason: "invalid_json",
+        origin: "https://api.openai.com",
+      },
+    });
   });
 
   it("maps aborted fetches to timeout", async () => {
@@ -539,7 +577,14 @@ describe("provider errors", () => {
         settings,
         new AbortController().signal,
       ),
-    ).rejects.toMatchObject({ code: "timeout" });
+    ).rejects.toMatchObject({
+      code: "timeout",
+      diagnostic: {
+        stage: "request",
+        reason: "timeout",
+        origin: "https://api.openai.com",
+      },
+    });
   });
 
   it("maps other fetch failures to network without exposing their message", async () => {
@@ -551,8 +596,52 @@ describe("provider errors", () => {
         settings,
         new AbortController().signal,
       ),
-    ).rejects.toMatchObject({ code: "network", message: "network" });
+    ).rejects.toMatchObject({
+      code: "network",
+      message: "network",
+      diagnostic: {
+        stage: "request",
+        reason: "request_failed",
+        origin: "https://api.openai.com",
+      },
+    });
   });
+
+  it.each([
+    ["anthropic", {}, "Expected data to contain a model list"],
+    ["gemini", {}, "Expected models to contain a model list"],
+  ] as const)(
+    "reports a missing %s model list",
+    async (providerId, body, context) => {
+      await expect(
+        getProvider(providerId, fetchSequence(jsonResponse(body))).listModels(
+          settings,
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        code: "invalid_response",
+        diagnostic: { stage: "response", reason: "missing_models", context },
+      });
+    },
+  );
+
+  it.each([
+    ["anthropic", { content: [] }, "Anthropic response text was empty"],
+    ["gemini", { candidates: [] }, "Gemini response text was empty"],
+  ] as const)(
+    "reports missing %s completion content",
+    async (providerId, body, context) => {
+      await expect(
+        getProvider(
+          providerId,
+          fetchSequence(jsonResponse(body)),
+        ).testConnection(settings, new AbortController().signal),
+      ).rejects.toMatchObject({
+        code: "invalid_response",
+        diagnostic: { stage: "response", reason: "missing_content", context },
+      });
+    },
+  );
 
   it("rejects an invalid completion shape", async () => {
     const provider = getProvider(
@@ -561,6 +650,13 @@ describe("provider errors", () => {
     );
     await expect(
       provider.categorise(settings, tabs, "en", new AbortController().signal),
-    ).rejects.toMatchObject({ code: "invalid_response" });
+    ).rejects.toMatchObject({
+      code: "invalid_response",
+      diagnostic: {
+        stage: "response",
+        reason: "missing_content",
+        context: "choices[0].message.content was empty",
+      },
+    });
   });
 });

@@ -15,9 +15,17 @@ export async function testActiveModel(deps: ModelTestDeps): Promise<void> {
   const stored = await loadSettings(deps.storage);
   const providerId = stored.activeProvider;
   const settings = providerId ? stored.providers[providerId] : undefined;
-  if (!providerId || !settings) throw new ArkError("not_configured");
+  if (!providerId || !settings)
+    throw new ArkError("not_configured", {
+      stage: "configuration",
+      reason: "invalid_configuration",
+      context: "No active provider and model were configured",
+    });
   if (!(await hasProviderPermission(deps.permissions, providerId, settings))) {
-    throw new ArkError("permission_denied");
+    throw new ArkError("permission_denied", {
+      stage: "permission",
+      reason: "permission_denied",
+    });
   }
 
   const controller = new AbortController();
@@ -30,7 +38,11 @@ export async function testActiveModel(deps: ModelTestDeps): Promise<void> {
       .providerFor(providerId)
       .testConnection(settings, controller.signal);
   } catch (error) {
-    if (controller.signal.aborted) throw new ArkError("timeout");
+    if (controller.signal.aborted)
+      throw new ArkError("timeout", {
+        stage: "request",
+        reason: "timeout",
+      });
     throw error;
   } finally {
     clearTimeout(timeout);

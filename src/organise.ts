@@ -68,9 +68,16 @@ async function requestCategorisation(
         deps.onReasoning,
       );
   } catch (error) {
-    if (isAbort(error, controller.signal)) throw new ArkError("timeout");
+    if (isAbort(error, controller.signal))
+      throw new ArkError("timeout", {
+        stage: "request",
+        reason: "timeout",
+      });
     if (error instanceof ArkError) throw error;
-    throw new ArkError("network");
+    throw new ArkError("network", {
+      stage: "request",
+      reason: "request_failed",
+    });
   } finally {
     clearTimeout(timeout);
   }
@@ -85,7 +92,11 @@ async function applyResult(
     await applyCategorisation(port, tabs, result);
   } catch (error) {
     if (error instanceof ArkError) throw error;
-    throw new ArkError("grouping_failed");
+    throw new ArkError("grouping_failed", {
+      stage: "grouping",
+      reason: "chrome_rejected",
+      context: "Chrome rejected a tab-group change",
+    });
   }
 }
 
@@ -95,10 +106,18 @@ export async function organiseTabs(
   const stored = await loadSettings(deps.storage);
   const providerId = stored.activeProvider;
   const settings = providerId ? stored.providers[providerId] : undefined;
-  if (!providerId || !settings) throw new ArkError("not_configured");
+  if (!providerId || !settings)
+    throw new ArkError("not_configured", {
+      stage: "configuration",
+      reason: "invalid_configuration",
+      context: "No active provider and model were configured",
+    });
 
   if (!(await hasProviderPermission(deps.permissions, providerId, settings))) {
-    throw new ArkError("permission_denied");
+    throw new ArkError("permission_denied", {
+      stage: "permission",
+      reason: "permission_denied",
+    });
   }
 
   const eligible = eligibleTabs(await deps.tabs.queryCurrentWindow());

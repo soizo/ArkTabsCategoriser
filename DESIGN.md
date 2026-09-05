@@ -39,19 +39,21 @@ The popup is 360px wide. Reading order is fixed:
 3. Native selector for configured provider/model combinations plus a secondary
    connectivity test
 4. One full-width organising action
-5. Conditional transient OpenRouter reasoning
+5. Conditional transient output for OpenRouter reasoning or safe diagnostics
 6. Status or recovery guidance
 7. Data-sharing disclosure
 
 The count is the focal point. The primary button must remain reachable and visually singular. Reserve status height to avoid layout jumps between idle, working, success, and error states.
 
-The model controls share one quiet inset region. The reasoning region appears
-only after displayable reasoning arrives, scrolls internally, and disappears
-when the operation settles. It is working feedback rather than saved content.
+The model controls share one quiet inset region. The output region appears
+after displayable reasoning or an error, scrolls internally, and is never
+stored. Successful runs clear it. Failed runs retain any reasoning already
+shown and append safe diagnostics without request bodies, provider responses,
+keys, tab data, or stack traces.
 
 ## Options page
 
-Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, editable system prompt with a restore-default action, privacy note, status, and save action form one continuous task.
+Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, editable system prompt with a restore-default action, privacy note, status, safe diagnostic output, and save action form one continuous task.
 
 At narrow widths, the model input, both model actions, and footer stack. All inputs, buttons, and provider options have a minimum 44px target. The page remains usable from 320px and at 200% zoom.
 

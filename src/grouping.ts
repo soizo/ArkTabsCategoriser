@@ -1,5 +1,5 @@
 import type { Categorisation, TabInput } from "./domain";
-import { ArkError } from "./errors";
+import { ArkError, sanitiseProviderMessage } from "./errors";
 
 export type TabGroupColor =
   | "grey"
@@ -88,7 +88,12 @@ async function snapshotGroups(
     .sort((left, right) => left - right)
     .map((groupId) => {
       const group = groups.find(({ id }) => id === groupId);
-      if (!group) throw new ArkError("grouping_failed");
+      if (!group)
+        throw new ArkError("grouping_failed", {
+          stage: "grouping",
+          reason: "chrome_rejected",
+          context: "Chrome did not return existing group metadata",
+        });
       const metadata: GroupSnapshot["metadata"] = {
         color: group.color,
         collapsed: group.collapsed,
@@ -121,7 +126,12 @@ export async function applyCategorisation(
   result: Categorisation,
 ): Promise<void> {
   const currentTabs = await port.queryCurrentWindow();
-  if (!sameTabs(initialTabs, currentTabs)) throw new ArkError("tabs_changed");
+  if (!sameTabs(initialTabs, currentTabs))
+    throw new ArkError("tabs_changed", {
+      stage: "validation",
+      reason: "tabs_changed",
+      context: "Eligible tabs changed before grouping",
+    });
 
   const eligibleTabs = currentTabs.filter(({ pinned }) => !pinned);
   const snapshot = await snapshotGroups(port, eligibleTabs);
@@ -132,7 +142,12 @@ export async function applyCategorisation(
   const resolveTabIds = (ids: string[]): number[] =>
     ids.map((id) => {
       const chromeTabId = chromeIds.get(id);
-      if (chromeTabId === undefined) throw new ArkError("grouping_failed");
+      if (chromeTabId === undefined)
+        throw new ArkError("grouping_failed", {
+          stage: "grouping",
+          reason: "chrome_rejected",
+          context: "A validated tab could not be resolved",
+        });
       return chromeTabId;
     });
 
@@ -148,7 +163,7 @@ export async function applyCategorisation(
         color: COLORS[index % COLORS.length],
       });
     }
-  } catch {
+  } catch (error) {
     try {
       await restoreGroups(
         port,
@@ -158,6 +173,12 @@ export async function applyCategorisation(
     } catch {
       // Best-effort restoration cannot safely do more after Chrome rejects it.
     }
-    throw new ArkError("grouping_failed");
+    throw new ArkError("grouping_failed", {
+      stage: "grouping",
+      reason: "chrome_rejected",
+      context:
+        sanitiseProviderMessage(error instanceof Error ? error.message : "") ??
+        "Chrome rejected a tab-group change",
+    });
   }
 }

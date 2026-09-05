@@ -78,6 +78,11 @@ describe("provider permissions", () => {
       requestProviderPermission(permissionsPort(false), "openai", settings),
     ).rejects.toMatchObject({
       code: "permission_denied",
+      diagnostic: {
+        stage: "permission",
+        reason: "permission_denied",
+        origin: "https://api.openai.com",
+      },
     });
   });
 

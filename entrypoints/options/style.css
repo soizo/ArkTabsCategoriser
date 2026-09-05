@@ -263,6 +263,31 @@ h1 {
   line-height: 1.5;
 }
 
+.output-panel {
+  margin-top: 20px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--ark-danger) 35%, var(--ark-border));
+  border-radius: var(--ark-radius-md);
+  background: var(--ark-surface-raised);
+}
+
+.output-panel h2 {
+  margin: 0;
+  color: var(--ark-danger);
+  font-size: 12px;
+}
+
+.output-panel p {
+  max-height: 160px;
+  overflow: auto;
+  margin: 10px 0 0;
+  color: var(--ark-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .form-footer {
   display: flex;
   gap: 18px;

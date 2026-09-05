@@ -114,10 +114,14 @@ describe("background messages", () => {
     expect(tested).toBe(true);
   });
 
-  it("returns only a stable model-test error code", async () => {
+  it("returns a safe model-test diagnostic", async () => {
     const subject = deps({
       testModel: async () => {
-        throw new ArkError("forbidden", "private provider response");
+        throw new ArkError("forbidden", {
+          stage: "response",
+          reason: "http_error",
+          status: 403,
+        });
       },
     });
 
@@ -126,6 +130,11 @@ describe("background messages", () => {
     ).resolves.toEqual({
       ok: false,
       errorCode: "forbidden",
+      diagnostic: {
+        stage: "response",
+        reason: "http_error",
+        status: 403,
+      },
     });
   });
 });
@@ -181,11 +190,15 @@ describe("organisation port", () => {
     );
   });
 
-  it("posts only a stable error code", async () => {
+  it("posts a safe error diagnostic", async () => {
     const subject = fakePort();
     createOrganisePortHandler({
       organise: async () => {
-        throw new ArkError("forbidden", "private provider detail");
+        throw new ArkError("forbidden", {
+          stage: "response",
+          reason: "http_error",
+          status: 403,
+        });
       },
     })(subject.port);
 
@@ -193,7 +206,15 @@ describe("organisation port", () => {
 
     await vi.waitFor(() =>
       expect(subject.posted).toEqual([
-        { type: "error", errorCode: "forbidden" },
+        {
+          type: "error",
+          errorCode: "forbidden",
+          diagnostic: {
+            stage: "response",
+            reason: "http_error",
+            status: 403,
+          },
+        },
       ]),
     );
   });

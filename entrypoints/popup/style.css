@@ -193,6 +193,14 @@ body {
   background: var(--ark-surface-raised);
 }
 
+.reasoning-panel[data-kind="error"] {
+  border-color: color-mix(in srgb, var(--ark-danger) 35%, var(--ark-border));
+}
+
+.reasoning-panel[data-kind="error"] h2 {
+  color: var(--ark-danger);
+}
+
 .reasoning-panel header {
   display: flex;
   gap: 8px;
@@ -227,6 +235,7 @@ body {
   color: var(--ark-muted);
   font-size: 12px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 

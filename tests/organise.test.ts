@@ -113,6 +113,10 @@ describe("organiseTabs", () => {
 
     await expect(organiseTabs(subject)).rejects.toMatchObject({
       code: "not_configured",
+      diagnostic: {
+        stage: "configuration",
+        reason: "invalid_configuration",
+      },
     });
     expect(providerCalls).toBe(0);
   });
@@ -216,7 +220,10 @@ describe("organiseTabs", () => {
       organiseTabs(
         deps({ tabs: port, timeoutMs: 1, providerFor: () => slowProvider }),
       ),
-    ).rejects.toMatchObject({ code: "timeout" });
+    ).rejects.toMatchObject({
+      code: "timeout",
+      diagnostic: { stage: "request", reason: "timeout" },
+    });
     expect(port.groupCalls).toEqual([]);
   });
 

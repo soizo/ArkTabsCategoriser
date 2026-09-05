@@ -176,7 +176,14 @@ describe("applyCategorisation", () => {
 
     await expect(
       applyCategorisation(port, initialTabs, result),
-    ).rejects.toMatchObject({ code: "tabs_changed" });
+    ).rejects.toMatchObject({
+      code: "tabs_changed",
+      diagnostic: {
+        stage: "validation",
+        reason: "tabs_changed",
+        context: "Eligible tabs changed before grouping",
+      },
+    });
     expect(port.mutations).toEqual([]);
   });
 
@@ -191,7 +198,14 @@ describe("applyCategorisation", () => {
         groups: [{ name: "Work", tabIds: ["t0", "t1"] }],
         ungroupedTabIds: ["t2"],
       }),
-    ).rejects.toMatchObject({ code: "grouping_failed" });
+    ).rejects.toMatchObject({
+      code: "grouping_failed",
+      diagnostic: {
+        stage: "grouping",
+        reason: "chrome_rejected",
+        context: "Chrome ungroup failure",
+      },
+    });
 
     const restored = port.tabs.find(({ id }) => id === 10)?.groupId;
     expect(restored).not.toBe(-1);
@@ -204,7 +218,14 @@ describe("applyCategorisation", () => {
 
     await expect(
       applyCategorisation(port, initialTabs, result),
-    ).rejects.toMatchObject({ code: "grouping_failed" });
+    ).rejects.toMatchObject({
+      code: "grouping_failed",
+      diagnostic: {
+        stage: "grouping",
+        reason: "chrome_rejected",
+        context: "Chrome group failure",
+      },
+    });
 
     const firstOriginal = port.tabs.find(({ id }) => id === 10)?.groupId;
     expect(firstOriginal).not.toBe(-1);

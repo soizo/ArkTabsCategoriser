@@ -1,6 +1,14 @@
 import "./style.css";
 import { defaultSystemPrompt } from "../../src/categorisation";
-import { ArkError } from "../../src/errors";
+import {
+  ArkError,
+  errorPayload,
+  formatDiagnostic,
+  type ArkDiagnostic,
+  type ArkErrorCode,
+  type ArkErrorPayload,
+  type DiagnosticField,
+} from "../../src/errors";
 import { localiseDocument, msg, type MessageKey } from "../../src/i18n";
 import {
   requestProviderPermission,
@@ -44,12 +52,44 @@ const saveButton = required<HTMLButtonElement>("#save-settings");
 const systemPromptInput = required<HTMLTextAreaElement>("#system-prompt");
 const resetPromptButton = required<HTMLButtonElement>("#reset-prompt");
 const status = required<HTMLElement>("#settings-status");
+const outputPanel = required<HTMLElement>("#settings-output");
+const outputContent = required<HTMLElement>("#settings-output-content");
 const providerInputs = [
   ...document.querySelectorAll<HTMLInputElement>('input[name="provider"]'),
 ];
 
 let selected: ProviderId = "openai";
 let drafts: Partial<Record<ProviderId, ProviderSettings>> = {};
+
+const diagnosticLabels = {
+  stage: "diagnosticStage",
+  reason: "diagnosticReason",
+  status: "diagnosticStatus",
+  origin: "diagnosticOrigin",
+  provider_message: "diagnosticProviderMessage",
+  context: "diagnosticContext",
+} as const satisfies Record<DiagnosticField, MessageKey>;
+
+function clearOutput(): void {
+  outputContent.textContent = "";
+  outputPanel.hidden = true;
+}
+
+function showOutput(payload: ArkErrorPayload, fallback: ArkDiagnostic): void {
+  outputContent.textContent = formatDiagnostic(
+    payload.diagnostic ?? fallback,
+    (field) => msg(diagnosticLabels[field]),
+  );
+  outputPanel.hidden = false;
+}
+
+function showFailure(
+  error: unknown,
+  fallbackCode: ArkErrorCode = "network",
+  fallback: ArkDiagnostic = { stage: "request", reason: "request_failed" },
+): void {
+  showOutput(errorPayload(error, fallbackCode, fallback), fallback);
+}
 
 function setStatus(
   key: MessageKey | "",
@@ -86,6 +126,7 @@ function renderProvider(): void {
   modelPicker.hidden = true;
   modelPickerLabel.hidden = true;
   setStatus("");
+  clearOutput();
 }
 
 function errorKey(error: unknown): MessageKey {
@@ -110,7 +151,11 @@ async function runWithTimeout<T>(
   try {
     return await operation(controller.signal);
   } catch (error) {
-    if (controller.signal.aborted) throw new ArkError("timeout");
+    if (controller.signal.aborted)
+      throw new ArkError("timeout", {
+        stage: "request",
+        reason: "timeout",
+      });
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -133,15 +178,28 @@ modelPicker.addEventListener("change", () => {
 resetPromptButton.addEventListener("click", () => {
   systemPromptInput.value = defaultSystemPrompt(browser.i18n.getUILanguage());
   setStatus("");
+  clearOutput();
 });
 
 loadModelsButton.addEventListener("click", async () => {
+  clearOutput();
   const providerSettings = readDraft();
   if (
     !providerSettings.apiKey ||
     (selected === "custom" && !providerSettings.baseUrl)
   ) {
     setStatus("invalidSettings", "error");
+    showOutput(
+      {
+        errorCode: "not_configured",
+        diagnostic: {
+          stage: "configuration",
+          reason: "invalid_configuration",
+          context: "Provider settings were incomplete",
+        },
+      },
+      { stage: "configuration", reason: "invalid_configuration" },
+    );
     return;
   }
 
@@ -172,12 +230,14 @@ loadModelsButton.addEventListener("click", async () => {
     setStatus("modelsLoaded", "success", String(models.length));
   } catch (error) {
     setStatus(errorKey(error), "error");
+    showFailure(error);
   } finally {
     loadModelsButton.disabled = false;
   }
 });
 
 testModelButton.addEventListener("click", async () => {
+  clearOutput();
   const providerSettings = readDraft();
   if (
     !providerSettings.apiKey ||
@@ -185,6 +245,17 @@ testModelButton.addEventListener("click", async () => {
     (selected === "custom" && !providerSettings.baseUrl)
   ) {
     setStatus("invalidSettings", "error");
+    showOutput(
+      {
+        errorCode: "not_configured",
+        diagnostic: {
+          stage: "configuration",
+          reason: "invalid_configuration",
+          context: "Provider settings were incomplete",
+        },
+      },
+      { stage: "configuration", reason: "invalid_configuration" },
+    );
     return;
   }
 
@@ -199,6 +270,7 @@ testModelButton.addEventListener("click", async () => {
     setStatus("modelTestSucceeded", "success");
   } catch (error) {
     setStatus(errorKey(error), "error");
+    showFailure(error);
   } finally {
     testModelButton.disabled = false;
     loadModelsButton.disabled = false;
@@ -207,6 +279,7 @@ testModelButton.addEventListener("click", async () => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  clearOutput();
   if (!form.reportValidity()) return;
 
   const providerSettings = readDraft();
@@ -222,9 +295,14 @@ form.addEventListener("submit", async (event) => {
     drafts = { ...saved.providers };
     setStatus("settingsSaved", "success");
   } catch (error) {
-    setStatus(
-      error instanceof TypeError ? "invalidSettings" : errorKey(error),
-      "error",
+    const invalidSettings = error instanceof TypeError;
+    setStatus(invalidSettings ? "invalidSettings" : errorKey(error), "error");
+    showFailure(
+      error,
+      invalidSettings ? "not_configured" : "network",
+      invalidSettings
+        ? { stage: "configuration", reason: "invalid_configuration" }
+        : { stage: "request", reason: "request_failed" },
     );
   } finally {
     saveButton.disabled = false;

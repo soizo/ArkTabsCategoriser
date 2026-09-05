@@ -23,7 +23,11 @@ function headers(settings: ProviderSettings): Record<string, string> {
 
 function modelIds(value: unknown): string[] {
   if (!isRecord(value) || !Array.isArray(value.models)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_models",
+      context: "Expected models to contain a model list",
+    });
   }
   return uniqueModels(
     value.models.flatMap((item) => {
@@ -40,18 +44,32 @@ function modelIds(value: unknown): string[] {
 
 function candidateText(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.candidates)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Gemini response text was empty",
+    });
   }
   const candidate = value.candidates[0];
   const content = isRecord(candidate) ? candidate.content : undefined;
   const parts = isRecord(content) ? content.parts : undefined;
-  if (!Array.isArray(parts)) throw new ArkError("invalid_response");
+  if (!Array.isArray(parts))
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Gemini response text was empty",
+    });
   const text = parts
     .flatMap((part) =>
       isRecord(part) && typeof part.text === "string" ? [part.text] : [],
     )
     .join("");
-  if (!text) throw new ArkError("invalid_response");
+  if (!text)
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Gemini response text was empty",
+    });
   return text;
 }
 
@@ -79,9 +97,7 @@ export function createGeminiProvider(fetchImpl: Fetch): Provider {
           method: "POST",
           headers: headers(settings),
           body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: "Reply with OK." }] },
-            ],
+            contents: [{ role: "user", parts: [{ text: "Reply with OK." }] }],
             generationConfig: {
               maxOutputTokens: 8,
               temperature: 0,

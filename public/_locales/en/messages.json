@@ -53,5 +53,12 @@
   "organisedGroupCount": { "message": "Created $1 tab groups; left $2 tabs ungrouped." },
   "tabsChanged": { "message": "Tabs changed while Ark was working. Run it again." },
   "groupingFailed": { "message": "Chrome could not apply every group. Your previous layout was restored where possible." },
+  "output": { "message": "Output" },
+  "diagnosticStage": { "message": "Stage" },
+  "diagnosticReason": { "message": "Reason" },
+  "diagnosticStatus": { "message": "HTTP status" },
+  "diagnosticOrigin": { "message": "Endpoint" },
+  "diagnosticProviderMessage": { "message": "Provider message" },
+  "diagnosticContext": { "message": "Detail" },
   "dataSentShort": { "message": "Sends titles + full URLs" }
 }

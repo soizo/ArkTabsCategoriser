@@ -46,8 +46,13 @@ export async function requestProviderPermission(
   provider: ProviderId,
   settings: ProviderSettings,
 ): Promise<void> {
-  if (!(await permissions.request(originPermission(provider, settings)))) {
-    throw new ArkError('permission_denied');
+  const origin = providerOrigin(provider, settings);
+  if (!(await permissions.request({ origins: [`${origin}/*`] }))) {
+    throw new ArkError("permission_denied", {
+      stage: "permission",
+      reason: "permission_denied",
+      origin,
+    });
   }
 }
 

@@ -1,5 +1,10 @@
 import "./style.css";
-import type { ArkErrorCode } from "../../src/errors";
+import {
+  appendDiagnosticOutput,
+  errorPayload,
+  type ArkErrorPayload,
+  type DiagnosticField,
+} from "../../src/errors";
 import type { ProviderId } from "../../src/domain";
 import { localiseDocument, msg, type MessageKey } from "../../src/i18n";
 import type { OrganisePortOutbound } from "../../src/messages";
@@ -19,9 +24,7 @@ type PopupStateResponse = {
   configuredProviders: { provider: ProviderId; model: string }[];
 };
 
-type SimpleResponse =
-  | { ok: true }
-  | { ok: false; errorCode: ArkErrorCode };
+type SimpleResponse = { ok: true } | ({ ok: false } & ArkErrorPayload);
 
 const providerNames: Record<ProviderId, string> = {
   openai: "OpenAI",
@@ -41,6 +44,8 @@ const organiseLabel = required<HTMLElement>("#organise-label");
 const settingsButton = required<HTMLButtonElement>("#settings");
 const statusElement = required<HTMLElement>("#popup-status");
 const reasoningPanel = required<HTMLElement>("#reasoning-panel");
+const reasoningHeading = required<HTMLElement>("#reasoning-heading");
+const reasoningPulse = required<HTMLElement>("#reasoning-pulse");
 const reasoningContent = required<HTMLElement>("#reasoning-content");
 const reasoningElapsed = required<HTMLElement>("#reasoning-elapsed");
 
@@ -52,12 +57,24 @@ let active:
 let reasoningStarted = 0;
 let reasoningTimer: ReturnType<typeof setInterval> | undefined;
 
+const diagnosticLabels = {
+  stage: "diagnosticStage",
+  reason: "diagnosticReason",
+  status: "diagnosticStatus",
+  origin: "diagnosticOrigin",
+  provider_message: "diagnosticProviderMessage",
+  context: "diagnosticContext",
+} as const satisfies Record<DiagnosticField, MessageKey>;
+
 function clearReasoning(): void {
   if (reasoningTimer) clearInterval(reasoningTimer);
   reasoningTimer = undefined;
   reasoningStarted = 0;
   reasoningContent.textContent = "";
   reasoningElapsed.textContent = "";
+  reasoningHeading.textContent = msg("modelReasoning");
+  reasoningPulse.hidden = false;
+  reasoningPanel.dataset.kind = "reasoning";
   reasoningPanel.hidden = true;
 }
 
@@ -66,6 +83,32 @@ function updateReasoningElapsed(): void {
     (performance.now() - reasoningStarted) /
     1000
   ).toFixed(1)} s`;
+}
+
+function appendError(payload: ArkErrorPayload): void {
+  if (reasoningTimer) clearInterval(reasoningTimer);
+  reasoningTimer = undefined;
+  const diagnostic = payload.diagnostic ?? {
+    stage: "transport",
+    reason: "request_failed",
+  };
+  reasoningHeading.textContent = msg("output");
+  reasoningPulse.hidden = true;
+  reasoningPanel.dataset.kind = "error";
+  reasoningPanel.hidden = false;
+  reasoningContent.textContent = appendDiagnosticOutput(
+    reasoningContent.textContent ?? "",
+    diagnostic,
+    (field) => msg(diagnosticLabels[field]),
+  );
+  reasoningContent.scrollTop = reasoningContent.scrollHeight;
+}
+
+function runtimeFailure(): ArkErrorPayload {
+  return errorPayload(undefined, "network", {
+    stage: "transport",
+    reason: "request_failed",
+  });
 }
 
 function appendReasoning(text: string): void {
@@ -115,6 +158,7 @@ settingsButton.addEventListener("click", () => {
 });
 
 modelElement.addEventListener("change", async () => {
+  clearReasoning();
   const previousProvider = active?.providerId;
   const providerId = modelElement.value as ProviderId;
   const selected = configuredProviders.find(
@@ -142,6 +186,7 @@ modelElement.addEventListener("change", async () => {
   } catch {
     if (previousProvider) modelElement.value = previousProvider;
     render({ kind: "error", count: state.count, code: "network" });
+    appendError(runtimeFailure());
   }
 });
 
@@ -160,6 +205,7 @@ testModelButton.addEventListener("click", async () => {
     })) as SimpleResponse;
     if (!response.ok) {
       render({ kind: "error", count: state.count, code: response.errorCode });
+      appendError(response);
       return;
     }
     render({
@@ -172,6 +218,7 @@ testModelButton.addEventListener("click", async () => {
     statusElement.dataset.kind = "success";
   } catch {
     render({ kind: "error", count: state.count, code: "network" });
+    appendError(runtimeFailure());
   }
 });
 
@@ -197,8 +244,8 @@ organiseButton.addEventListener("click", async () => {
       return;
     }
     settled = true;
-    clearReasoning();
     if (message.type === "complete") {
+      clearReasoning();
       render({
         kind: "success",
         count: state.count,
@@ -207,13 +254,14 @@ organiseButton.addEventListener("click", async () => {
       });
     } else {
       render({ kind: "error", count: state.count, code: message.errorCode });
+      appendError(message);
     }
     port.disconnect();
   });
   port.onDisconnect.addListener(() => {
     if (!settled) {
-      clearReasoning();
       render({ kind: "error", count: state.count, code: "network" });
+      appendError(runtimeFailure());
     }
   });
   port.postMessage({ type: "start" });
@@ -255,4 +303,5 @@ try {
   }
 } catch {
   render({ kind: "error", count: 0, code: "network" });
+  appendError(runtimeFailure());
 }

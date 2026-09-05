@@ -42,6 +42,27 @@ describe("parseCategorisation", () => {
     ).toEqual(["Work", "Read"]);
   });
 
+  it("reports why categorisation validation failed without echoing model values", () => {
+    const text = JSON.stringify({
+      groups: [
+        { name: "Work", tabIds: ["t0", "t1"] },
+        { name: "Read", tabIds: ["t1", "t2"] },
+      ],
+      ungroupedTabIds: [],
+    });
+
+    expect(() => parseCategorisation(text, expectedIds)).toThrowError(
+      expect.objectContaining({
+        code: "invalid_response",
+        diagnostic: {
+          stage: "validation",
+          reason: "invalid_categorisation",
+          context: "A tab ID was unknown or repeated",
+        },
+      }),
+    );
+  });
+
   it.each([
     ["malformed JSON", "not json"],
     ["wrong root shape", JSON.stringify([])],
@@ -118,7 +139,13 @@ describe("parseCategorisation", () => {
     ],
   ])("rejects %s", (_caseName, text) => {
     expect(() => parseCategorisation(text, expectedIds)).toThrowError(
-      expect.objectContaining({ code: "invalid_response" }),
+      expect.objectContaining({
+        code: "invalid_response",
+        diagnostic: expect.objectContaining({
+          stage: "validation",
+          reason: "invalid_categorisation",
+        }),
+      }),
     );
   });
 });

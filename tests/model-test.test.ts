@@ -81,14 +81,27 @@ describe("testActiveModel", () => {
           },
         }),
       ),
-    ).rejects.toMatchObject({ code: "not_configured" });
+    ).rejects.toMatchObject({
+      code: "not_configured",
+      diagnostic: {
+        stage: "configuration",
+        reason: "invalid_configuration",
+        context: "No active provider and model were configured",
+      },
+    });
     expect(providerCalls).toBe(0);
   });
 
   it("rejects missing permission without requesting it", async () => {
     await expect(
       testActiveModel(deps({ permissions: permissions(false) })),
-    ).rejects.toMatchObject({ code: "permission_denied" });
+    ).rejects.toMatchObject({
+      code: "permission_denied",
+      diagnostic: {
+        stage: "permission",
+        reason: "permission_denied",
+      },
+    });
   });
 
   it("uses a 60 second timeout by default", async () => {
@@ -110,6 +123,7 @@ describe("testActiveModel", () => {
     try {
       const result = expect(testActiveModel(subject)).rejects.toMatchObject({
         code: "timeout",
+        diagnostic: { stage: "request", reason: "timeout" },
       });
       await vi.advanceTimersByTimeAsync(30_000);
       expect(signal?.aborted).toBe(false);

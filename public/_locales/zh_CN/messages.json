@@ -53,5 +53,12 @@
   "organisedGroupCount": { "message": "已创建 $1 个标签组；$2 个标签页保持未分组。" },
   "tabsChanged": { "message": "整理过程中标签页发生了变化，请重新运行。" },
   "groupingFailed": { "message": "Chrome 未能应用全部分组；Ark 已尽可能恢复原布局。" },
+  "output": { "message": "输出" },
+  "diagnosticStage": { "message": "阶段" },
+  "diagnosticReason": { "message": "原因" },
+  "diagnosticStatus": { "message": "HTTP 状态" },
+  "diagnosticOrigin": { "message": "接口" },
+  "diagnosticProviderMessage": { "message": "服务商消息" },
+  "diagnosticContext": { "message": "详情" },
   "dataSentShort": { "message": "发送标题和完整 URL" }
 }

@@ -3,7 +3,7 @@ import {
   parseCategorisation,
 } from "../categorisation";
 import type { Categorisation, ProviderId } from "../domain";
-import { ArkError } from "../errors";
+import { ArkError, sanitiseProviderMessage } from "../errors";
 import { readSseData } from "../sse";
 import type { ProviderSettings } from "../settings";
 import {
@@ -76,7 +76,11 @@ function headers(
 
 function modelIds(value: unknown): string[] {
   if (!isRecord(value) || !Array.isArray(value.data)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_models",
+      context: "Expected data to contain a model list",
+    });
   }
   return uniqueModels(
     value.data.flatMap((item) => {
@@ -87,7 +91,11 @@ function modelIds(value: unknown): string[] {
 
 function completionText(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.choices)) {
-    throw new ArkError("invalid_response");
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "choices[0].message.content was empty",
+    });
   }
   const choice = value.choices[0];
   const message = isRecord(choice) ? choice.message : undefined;
@@ -96,7 +104,16 @@ function completionText(value: unknown): string {
     typeof message.content !== "string" ||
     !message.content
   ) {
-    throw new ArkError("invalid_response");
+    const finishReason = isRecord(choice)
+      ? sanitiseProviderMessage(choice.finish_reason)
+      : undefined;
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: `choices[0].message.content was empty${
+        finishReason ? `; finish_reason=${finishReason}` : ""
+      }`,
+    });
   }
   return message.content;
 }
@@ -129,7 +146,12 @@ async function streamedCompletion(
   response: Response,
   onReasoning: (text: string) => void,
 ): Promise<string> {
-  if (!response.body) throw new ArkError("invalid_response");
+  if (!response.body)
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "malformed_stream",
+      context: "Response stream was missing",
+    });
   let content = "";
   for await (const data of readSseData(response.body)) {
     if (data === "[DONE]") break;
@@ -138,12 +160,28 @@ async function streamedCompletion(
     try {
       value = JSON.parse(data);
     } catch {
-      throw new ArkError("invalid_response");
+      throw new ArkError("invalid_response", {
+        stage: "response",
+        reason: "malformed_stream",
+        context: "Stream event was not valid JSON",
+      });
     }
-    if (!isRecord(value)) throw new ArkError("invalid_response");
+    if (!isRecord(value))
+      throw new ArkError("invalid_response", {
+        stage: "response",
+        reason: "malformed_stream",
+        context: "Stream event was not an object",
+      });
     if (isRecord(value.error)) {
       const code = Number(value.error.code);
-      throw arkErrorForStatus(Number.isFinite(code) ? code : 500);
+      const status = Number.isFinite(code) ? code : 500;
+      const providerMessage = sanitiseProviderMessage(value.error.message);
+      throw arkErrorForStatus(status, {
+        stage: "response",
+        reason: "http_error",
+        status,
+        ...(providerMessage ? { providerMessage } : {}),
+      });
     }
 
     const choice = Array.isArray(value.choices) ? value.choices[0] : undefined;
@@ -152,7 +190,12 @@ async function streamedCompletion(
     for (const text of reasoningFragments(delta)) onReasoning(text);
     if (typeof delta.content === "string") content += delta.content;
   }
-  if (!content) throw new ArkError("invalid_response");
+  if (!content)
+    throw new ArkError("invalid_response", {
+      stage: "response",
+      reason: "missing_content",
+      context: "Stream ended without completion content",
+    });
   return content;
 }
 
