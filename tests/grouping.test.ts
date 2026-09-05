@@ -144,6 +144,24 @@ describe("applyCategorisation", () => {
     });
   });
 
+  it("uses model-selected colors and falls back to deterministic colors", async () => {
+    const port = createTabsPort();
+
+    const coloredResult: Categorisation = {
+      groups: [
+        { name: "Work", color: "green", tabIds: ["t0", "t1"] },
+        { name: "Read", tabIds: ["t2"] },
+      ],
+      ungroupedTabIds: [],
+    };
+    await applyCategorisation(port, initialTabs, coloredResult);
+
+    const workGroup = port.tabs.find(({ id }) => id === 10)?.groupId;
+    const readGroup = port.tabs.find(({ id }) => id === 12)?.groupId;
+    expect(port.groups.get(workGroup ?? -1)?.color).toBe("green");
+    expect(port.groups.get(readGroup ?? -1)?.color).toBe("blue");
+  });
+
   it("actively removes model-selected tabs from their previous group", async () => {
     const tabs = browserTabs();
     const tab = tabs.find(({ id }) => id === 12);

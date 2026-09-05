@@ -1,16 +1,5 @@
-import type { Categorisation, TabInput } from "./domain";
+import type { Categorisation, TabGroupColor, TabInput } from "./domain";
 import { ArkError, sanitiseProviderMessage } from "./errors";
-
-export type TabGroupColor =
-  | "grey"
-  | "blue"
-  | "red"
-  | "yellow"
-  | "green"
-  | "pink"
-  | "purple"
-  | "cyan"
-  | "orange";
 
 export type BrowserTab = {
   id: number;
@@ -160,7 +149,7 @@ export async function applyCategorisation(
       const groupId = await port.group(tabIds);
       await port.updateGroup(groupId, {
         title: category.name,
-        color: COLORS[index % COLORS.length],
+        color: category.color ?? COLORS[index % COLORS.length],
       });
     }
   } catch (error) {

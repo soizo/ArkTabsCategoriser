@@ -42,6 +42,34 @@ describe("parseCategorisation", () => {
     ).toEqual(["Work", "Read"]);
   });
 
+  it("normalises Chrome colors, common aliases, and hex values", () => {
+    const text = JSON.stringify({
+      groups: [
+        { name: "Work", color: "Blue", tabIds: ["t0"] },
+        { name: "Research", color: "teal", tabIds: ["t1"] },
+        { name: "Read", color: "#ff9900", tabIds: ["t2"] },
+      ],
+      ungroupedTabIds: [],
+    });
+
+    expect(parseCategorisation(text, expectedIds).groups).toEqual([
+      { name: "Work", color: "blue", tabIds: ["t0"] },
+      { name: "Research", color: "cyan", tabIds: ["t1"] },
+      { name: "Read", color: "orange", tabIds: ["t2"] },
+    ]);
+  });
+
+  it("omits an unrecognised color so grouping can assign one", () => {
+    const text = JSON.stringify({
+      groups: [{ name: "Work", color: "ultraviolet", tabIds: expectedIds }],
+      ungroupedTabIds: [],
+    });
+
+    expect(parseCategorisation(text, expectedIds).groups).toEqual([
+      { name: "Work", tabIds: expectedIds },
+    ]);
+  });
+
   it("reports why categorisation validation failed without echoing model values", () => {
     const text = JSON.stringify({
       groups: [
@@ -66,6 +94,13 @@ describe("parseCategorisation", () => {
   it.each([
     ["malformed JSON", "not json"],
     ["wrong root shape", JSON.stringify([])],
+    [
+      "non-string color",
+      JSON.stringify({
+        groups: [{ name: "Work", color: 42, tabIds: expectedIds }],
+        ungroupedTabIds: [],
+      }),
+    ],
     [
       "blank name",
       JSON.stringify({
@@ -174,6 +209,10 @@ describe("buildCategorisationPrompt", () => {
     expect(prompt.system).toContain("ungroupedTabIds");
     expect(prompt.system).toContain("without a useful shared category");
     expect(prompt.system).toContain("domain as secondary context");
+    expect(prompt.system).toContain("optional color");
+    expect(prompt.system).toContain(
+      "grey, blue, red, yellow, green, pink, purple, cyan, or orange",
+    );
     expect(prompt.user).toContain("WXT documentation");
     expect(prompt.user).toContain(
       "https://developer.chrome.com/docs/extensions",

@@ -12,8 +12,20 @@ export type TabInput = {
   url: string;
 };
 
+export type TabGroupColor =
+  | "grey"
+  | "blue"
+  | "red"
+  | "yellow"
+  | "green"
+  | "pink"
+  | "purple"
+  | "cyan"
+  | "orange";
+
 export type CategoryGroup = {
   name: string;
+  color?: TabGroupColor;
   tabIds: string[];
 };
 
