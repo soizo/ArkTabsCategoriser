@@ -131,6 +131,28 @@
           </p>
         </div>
 
+        <details class="advanced-settings">
+          <summary data-i18n="advancedSettings">Advanced settings</summary>
+          <div class="field">
+            <label for="input-token-limit" data-i18n="inputTokenLimit"
+              >Input token limit</label
+            >
+            <input
+              id="input-token-limit"
+              name="inputTokenLimit"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              data-i18n-placeholder="inputTokenLimitPlaceholder"
+            />
+            <p class="field-help" data-i18n="inputTokenLimitHelp">
+              Leave blank to retry automatically with smaller batches only when
+              the model rejects a long input.
+            </p>
+          </div>
+        </details>
+
         <div class="field">
           <div class="field-heading">
             <label for="system-prompt" data-i18n="systemPrompt"

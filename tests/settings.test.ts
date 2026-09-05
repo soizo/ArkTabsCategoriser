@@ -59,6 +59,35 @@ describe("provider settings", () => {
     });
   });
 
+  it("stores an optional input token limit with the model", async () => {
+    const storage = createStorage();
+
+    await saveProvider(storage, "openai", {
+      apiKey: "key",
+      model: "gpt-4.1",
+      inputTokenLimit: 16_384,
+    } as Parameters<typeof saveProvider>[2]);
+
+    await expect(loadSettings(storage)).resolves.toMatchObject({
+      providers: {
+        openai: { inputTokenLimit: 16_384 },
+      },
+    });
+  });
+
+  it("rejects invalid input token limits", async () => {
+    const storage = createStorage();
+
+    await expect(
+      saveProvider(storage, "openai", {
+        apiKey: "key",
+        model: "gpt-4.1",
+        inputTokenLimit: 1.5,
+      } as Parameters<typeof saveProvider>[2]),
+    ).rejects.toThrow();
+    expect(storage.snapshot()).toEqual({});
+  });
+
   it("stores one global edited system prompt with provider settings", async () => {
     const storage = createStorage();
 

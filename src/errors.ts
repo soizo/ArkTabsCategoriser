@@ -7,6 +7,7 @@ export type ArkErrorCode =
   | "timeout"
   | "network"
   | "invalid_response"
+  | "input_too_long"
   | "tabs_changed"
   | "grouping_failed";
 
@@ -30,6 +31,7 @@ export type ArkDiagnosticReason =
   | "missing_content"
   | "malformed_stream"
   | "invalid_categorisation"
+  | "input_too_long"
   | "tabs_changed"
   | "runtime_disconnected"
   | "chrome_rejected";

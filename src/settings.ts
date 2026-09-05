@@ -4,6 +4,7 @@ export type ProviderSettings = {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  inputTokenLimit?: number;
 };
 
 export type ArkSettings = {
@@ -38,10 +39,15 @@ function readProviderSettings(value: unknown): ProviderSettings | undefined {
   if (value.baseUrl !== undefined && typeof value.baseUrl !== "string") {
     return undefined;
   }
+  const inputTokenLimit =
+    Number.isInteger(value.inputTokenLimit) && Number(value.inputTokenLimit) > 0
+      ? Number(value.inputTokenLimit)
+      : undefined;
   return {
     apiKey: value.apiKey,
     model: value.model,
     ...(value.baseUrl === undefined ? {} : { baseUrl: value.baseUrl }),
+    ...(inputTokenLimit === undefined ? {} : { inputTokenLimit }),
   };
 }
 
@@ -79,11 +85,14 @@ export async function saveProvider(
   const apiKey = settings.apiKey.trim();
   const model = settings.model.trim();
   const baseUrl = settings.baseUrl?.trim();
+  const inputTokenLimit = settings.inputTokenLimit;
   const prompt = systemPrompt?.trim();
   if (
     !apiKey ||
     !model ||
     (provider === "custom" && !baseUrl) ||
+    (inputTokenLimit !== undefined &&
+      (!Number.isInteger(inputTokenLimit) || inputTokenLimit <= 0)) ||
     (systemPrompt !== undefined && !prompt)
   ) {
     throw new TypeError("Incomplete provider settings");
@@ -98,6 +107,7 @@ export async function saveProvider(
         apiKey,
         model,
         ...(baseUrl === undefined ? {} : { baseUrl }),
+        ...(inputTokenLimit === undefined ? {} : { inputTokenLimit }),
       },
     },
     ...(prompt

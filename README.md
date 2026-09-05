@@ -13,7 +13,10 @@ Ark has no model service, proxy, account, analytics, or backend. Requests go dir
 - Custom OpenAI-compatible APIs
 
 The model field is editable. You can load a provider's model list or type any
-model ID directly. The system prompt is also editable in settings.
+model ID directly. The system prompt is also editable in settings. Ark normally
+sends all eligible tabs together, then automatically retries in smaller batches
+if the model reports that its input is too long. An optional advanced input
+token limit can make Ark split before sending.
 
 The Popup can test the saved active model. Settings can test the current draft
 before it is saved. Each test sends a minimal real generation request and may
@@ -70,7 +73,7 @@ The unpacked build is generated under `.output/chrome-mv3/`. WXT also creates th
 6. For Custom, enter the OpenAI-compatible base URL including any version path, such as `https://llm.example/v1`.
 7. Save settings and approve access to that API origin.
 
-Open Ark from Chrome's toolbar, choose any configured provider/model, and select **Organise tabs**. Ark validates that every eligible tab appears exactly once across generated groups and explicitly ungrouped tabs, then confirms the tab set has not changed before modifying groups.
+Open Ark from Chrome's toolbar, choose any configured provider/model, and select **Organise tabs**. Long inputs are split automatically when the provider reports a context limit; advanced settings can supply a conservative input token limit for proactive batching. Ark reuses category names across batches, validates that every eligible tab appears exactly once across generated groups and explicitly ungrouped tabs, then confirms the tab set has not changed before modifying groups.
 
 The Popup also lets you select several existing groups, edit each name, and apply the renames together. If Chrome rejects a later rename, Ark restores earlier names where possible.
 

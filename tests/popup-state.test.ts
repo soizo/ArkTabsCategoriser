@@ -100,6 +100,7 @@ describe("popupView", () => {
     ["rate_limited", "rateLimited"],
     ["timeout", "requestTimeout"],
     ["invalid_response", "invalidProviderResponse"],
+    ["input_too_long", "inputTooLong"],
     ["tabs_changed", "tabsChanged"],
     ["grouping_failed", "groupingFailed"],
     ["network", "networkError"],

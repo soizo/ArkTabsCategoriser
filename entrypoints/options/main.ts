@@ -46,6 +46,7 @@ const baseUrlField = required<HTMLElement>("#base-url-field");
 const modelInput = required<HTMLInputElement>("#model");
 const modelPicker = required<HTMLSelectElement>("#model-picker");
 const modelPickerLabel = required<HTMLLabelElement>("#model-picker-label");
+const inputTokenLimitInput = required<HTMLInputElement>("#input-token-limit");
 const loadModelsButton = required<HTMLButtonElement>("#load-models");
 const testModelButton = required<HTMLButtonElement>("#test-model");
 const saveButton = required<HTMLButtonElement>("#save-settings");
@@ -106,7 +107,11 @@ function readDraft(): ProviderSettings {
     model: modelInput.value.trim(),
   };
   const baseUrl = baseUrlInput.value.trim();
+  const inputTokenLimit = inputTokenLimitInput.valueAsNumber;
   if (baseUrl) settings.baseUrl = baseUrl;
+  if (Number.isInteger(inputTokenLimit) && inputTokenLimit > 0) {
+    settings.inputTokenLimit = inputTokenLimit;
+  }
   return settings;
 }
 
@@ -119,6 +124,7 @@ function renderProvider(): void {
   apiKeyInput.value = draft?.apiKey ?? "";
   modelInput.value = draft?.model ?? "";
   baseUrlInput.value = draft?.baseUrl ?? "";
+  inputTokenLimitInput.value = draft?.inputTokenLimit?.toString() ?? "";
   baseUrlField.hidden = selected !== "custom";
   baseUrlInput.required = selected === "custom";
   for (const input of providerInputs) input.checked = input.value === selected;
@@ -138,6 +144,7 @@ function errorKey(error: unknown): MessageKey {
     rate_limited: "rateLimited",
     timeout: "requestTimeout",
     invalid_response: "invalidProviderResponse",
+    input_too_long: "inputTooLong",
     network: "networkError",
   };
   return keys[error.code] ?? "networkError";

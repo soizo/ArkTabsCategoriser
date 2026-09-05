@@ -26,11 +26,14 @@ function permissions(granted = true): PermissionsPort {
   };
 }
 
-function tabsPort(tabCount = 2): TabsPort & { groupCalls: number[][] } {
+function tabsPort(
+  tabCount = 2,
+  title: (index: number) => string = (index) => `Tab ${index}`,
+): TabsPort & { groupCalls: number[][] } {
   const tabs: BrowserTab[] = Array.from({ length: tabCount }, (_, index) => ({
     id: index + 10,
     windowId: 1,
-    title: `Tab ${index}`,
+    title: title(index),
     url: `https://example.com/${index}`,
     pinned: false,
     groupId: -1,
@@ -182,27 +185,138 @@ describe("organiseTabs", () => {
     const subject = deps({
       onReasoning: (text) => reasoning.push(text),
       providerFor: () =>
-        provider(
-          async (
-            _settings,
-            _tabs,
-            _locale,
-            _signal,
-            _prompt,
-            emit,
-          ) => {
-            emit?.("First thought. ");
-            emit?.("Second thought.");
-            return {
-              groups: [{ name: "Docs", tabIds: ["t0", "t1"] }],
-              ungroupedTabIds: [],
-            };
-          },
-        ),
+        provider(async (_settings, _tabs, _locale, _signal, _prompt, emit) => {
+          emit?.("First thought. ");
+          emit?.("Second thought.");
+          return {
+            groups: [{ name: "Docs", tabIds: ["t0", "t1"] }],
+            ungroupedTabIds: [],
+          };
+        }),
     });
 
     await organiseTabs(subject);
     expect(reasoning).toEqual(["First thought. ", "Second thought."]);
+  });
+
+  it("pre-splits requests using the configured input token limit", async () => {
+    const received: string[][] = [];
+    const subject = deps({
+      storage: storageWith({
+        activeProvider: "openai",
+        providers: {
+          openai: {
+            apiKey: "key",
+            model: "model",
+            inputTokenLimit: 500,
+          } as ArkSettings["providers"]["openai"],
+        },
+        systemPrompt: "Sort these tabs.",
+      }),
+      tabs: tabsPort(4, (index) => `${index}-${"x".repeat(300)}`),
+      providerFor: () =>
+        provider(async (_settings, tabs) => {
+          received.push(tabs.map(({ id }) => id));
+          return { groups: [], ungroupedTabIds: tabs.map(({ id }) => id) };
+        }),
+    });
+
+    await expect(organiseTabs(subject)).resolves.toEqual({
+      groupCount: 0,
+      ungroupedCount: 4,
+    });
+    expect(received).toEqual([["t0"], ["t1"], ["t2"], ["t3"]]);
+  });
+
+  it("splits an automatically detected oversized request and reuses groups", async () => {
+    const received: string[][] = [];
+    const subject = deps({
+      tabs: tabsPort(2),
+      providerFor: () =>
+        provider(async (_settings, tabs, _locale, _signal, prompt) => {
+          received.push(tabs.map(({ id }) => id));
+          if (tabs.length > 1) {
+            throw new ArkError("input_too_long" as ArkError["code"]);
+          }
+          const name =
+            tabs[0]?.id === "t0"
+              ? "Docs"
+              : prompt?.includes('"Docs"')
+                ? "Docs"
+                : "Other";
+          return {
+            groups: [{ name, tabIds: [tabs[0]?.id ?? ""] }],
+            ungroupedTabIds: [],
+          };
+        }),
+    });
+
+    await expect(organiseTabs(subject)).resolves.toEqual({
+      groupCount: 1,
+      ungroupedCount: 0,
+    });
+    expect(received).toEqual([["t0", "t1"], ["t0"], ["t1"]]);
+  });
+
+  it("balances automatic splits by input size rather than tab count", async () => {
+    const received: string[][] = [];
+    const subject = deps({
+      tabs: tabsPort(4, (index) =>
+        index === 0 ? "x".repeat(800) : `Tab ${index}`,
+      ),
+      providerFor: () =>
+        provider(async (_settings, tabs) => {
+          received.push(tabs.map(({ id }) => id));
+          if (tabs.length === 4) throw new ArkError("input_too_long");
+          return { groups: [], ungroupedTabIds: tabs.map(({ id }) => id) };
+        }),
+    });
+
+    await organiseTabs(subject);
+    expect(received).toEqual([
+      ["t0", "t1", "t2", "t3"],
+      ["t0"],
+      ["t1", "t2", "t3"],
+    ]);
+  });
+
+  it("stops when one tab is still too large", async () => {
+    const port = tabsPort(2);
+    const failedProvider = provider(async () => {
+      throw new ArkError("input_too_long" as ArkError["code"]);
+    });
+
+    await expect(
+      organiseTabs(deps({ tabs: port, providerFor: () => failedProvider })),
+    ).rejects.toMatchObject({ code: "input_too_long" });
+    expect(port.groupCalls).toEqual([]);
+  });
+
+  it("rejects more than eight groups across batches before changing tabs", async () => {
+    const port = tabsPort(9);
+    const subject = deps({
+      tabs: port,
+      providerFor: () =>
+        provider(async (_settings, tabs) => {
+          if (tabs.length > 1) {
+            throw new ArkError("input_too_long");
+          }
+          return {
+            groups: [
+              {
+                name: `Group ${tabs[0]?.id}`,
+                tabIds: [tabs[0]?.id ?? ""],
+              },
+            ],
+            ungroupedTabIds: [],
+          };
+        }),
+    });
+
+    await expect(organiseTabs(subject)).rejects.toMatchObject({
+      code: "invalid_response",
+    });
+    expect(port.groupCalls).toEqual([]);
   });
 
   it("turns an expired request into a timeout without grouping", async () => {
@@ -245,9 +359,9 @@ describe("organiseTabs", () => {
     try {
       const subject = deps({ providerFor: () => slowProvider });
       delete subject.timeoutMs;
-      const result = expect(
-        organiseTabs(subject),
-      ).rejects.toMatchObject({ code: "timeout" });
+      const result = expect(organiseTabs(subject)).rejects.toMatchObject({
+        code: "timeout",
+      });
       await vi.advanceTimersByTimeAsync(30_000);
       expect(signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(30_000);

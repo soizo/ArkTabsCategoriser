@@ -39,6 +39,16 @@ export function arkErrorForStatus(
   status: number,
   diagnostic?: ArkDiagnostic,
 ): ArkError {
+  const message = diagnostic?.providerMessage ?? "";
+  if (
+    status === 413 ||
+    (status === 400 &&
+      /(?:context|prompt|input|token).*(?:exceed|too (?:long|large)|maximum|max)/i.test(
+        message,
+      ))
+  ) {
+    return new ArkError("input_too_long", diagnostic);
+  }
   if (status === 401) return new ArkError("unauthorised", diagnostic);
   if (status === 403) return new ArkError("forbidden", diagnostic);
   if (status === 408) return new ArkError("timeout", diagnostic);
@@ -63,17 +73,25 @@ function authenticationSecrets(headers: HeadersInit | undefined): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
-async function providerErrorMessage(
+async function providerError(
   response: Response,
   secrets: string[],
-): Promise<string | undefined> {
+): Promise<{ message?: string; inputTooLong: boolean }> {
   try {
     const value: unknown = await response.json();
-    if (!isRecord(value)) return undefined;
+    if (!isRecord(value)) return { inputTooLong: false };
     const error = isRecord(value.error) ? value.error : value;
-    return sanitiseProviderMessage(error.message, secrets);
+    const code = typeof error.code === "string" ? error.code : "";
+    const message = sanitiseProviderMessage(error.message, secrets);
+    return {
+      ...(message ? { message } : {}),
+      inputTooLong:
+        /(?:context_length_exceeded|prompt_too_long|input_too_long|request_too_large)/i.test(
+          code,
+        ),
+    };
   } catch {
-    return undefined;
+    return { inputTooLong: false };
   }
 }
 
@@ -107,17 +125,19 @@ export async function requestResponse(
 
   if (!response.ok) {
     const requestOrigin = origin(url);
-    const providerMessage = await providerErrorMessage(
+    const details = await providerError(
       response,
       authenticationSecrets(init.headers),
     );
-    throw arkErrorForStatus(response.status, {
+    const diagnostic: ArkDiagnostic = {
       stage: "response",
       reason: "http_error",
       status: response.status,
       ...(requestOrigin ? { origin: requestOrigin } : {}),
-      ...(providerMessage ? { providerMessage } : {}),
-    });
+      ...(details.message ? { providerMessage: details.message } : {}),
+    };
+    if (details.inputTooLong) throw new ArkError("input_too_long", diagnostic);
+    throw arkErrorForStatus(response.status, diagnostic);
   }
   return response;
 }

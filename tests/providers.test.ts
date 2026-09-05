@@ -528,6 +528,7 @@ describe("provider errors", () => {
     [401, "unauthorised"],
     [403, "forbidden"],
     [429, "rate_limited"],
+    [400, "network"],
     [500, "network"],
   ] as const)("maps HTTP %s to %s", async (status, code) => {
     const provider = getProvider(
@@ -547,6 +548,44 @@ describe("provider errors", () => {
         origin: "https://api.openai.com",
         providerMessage: "private provider text",
       },
+    });
+  });
+
+  it("recognises a structured context length error code", async () => {
+    const provider = getProvider(
+      "openai",
+      fetchSequence(
+        jsonResponse(
+          {
+            error: {
+              code: "context_length_exceeded",
+              message: "Please shorten your messages.",
+            },
+          },
+          400,
+        ),
+      ),
+    );
+
+    await expect(
+      provider.categorise(settings, tabs, "en", new AbortController().signal),
+    ).rejects.toMatchObject({ code: "input_too_long" });
+  });
+
+  it.each([
+    [400, "This model's maximum context length was exceeded"],
+    [413, "Request payload too large"],
+  ])("recognises HTTP %s input length errors", async (status, message) => {
+    const provider = getProvider(
+      "openai",
+      fetchSequence(jsonResponse({ error: { message } }, status)),
+    );
+
+    await expect(
+      provider.categorise(settings, tabs, "en", new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "input_too_long",
+      diagnostic: { stage: "response", status },
     });
   });
 

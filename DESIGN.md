@@ -58,7 +58,7 @@ keys, tab data, or stack traces.
 
 ## Options page
 
-Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, editable system prompt with a restore-default action, privacy note, status, safe diagnostic output, and save action form one continuous task.
+Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, editable system prompt with a restore-default action, privacy note, status, safe diagnostic output, and save action form one continuous task. A collapsed advanced section optionally overrides the model input token limit; blank keeps automatic retry-and-split behavior.
 
 At narrow widths, the model input, both model actions, and footer stack. All inputs, buttons, and provider options have a minimum 44px target. The page remains usable from 320px and at 200% zoom.
 

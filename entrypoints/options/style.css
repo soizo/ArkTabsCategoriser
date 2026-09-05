@@ -129,8 +129,27 @@ h1 {
   outline-offset: 2px;
 }
 
-.field + .field {
+.field + .field,
+.advanced-settings + .field {
   margin-top: 22px;
+}
+
+.advanced-settings {
+  margin-top: 22px;
+  color: var(--ark-text);
+}
+
+.advanced-settings summary {
+  min-height: 44px;
+  color: var(--ark-accent);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 44px;
+  cursor: pointer;
+}
+
+.advanced-settings[open] summary {
+  margin-bottom: 9px;
 }
 
 .field input,
