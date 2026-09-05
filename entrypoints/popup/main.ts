@@ -5,7 +5,7 @@ import {
   type ArkErrorPayload,
   type DiagnosticField,
 } from "../../src/errors";
-import type { ProviderId } from "../../src/domain";
+import type { ProviderId, TabGroupColor } from "../../src/domain";
 import { localiseDocument, msg, type MessageKey } from "../../src/i18n";
 import type { OrganisePortOutbound } from "../../src/messages";
 import { popupView, type PopupState } from "../../src/popup-state";
@@ -22,6 +22,7 @@ type PopupStateResponse = {
   provider?: ProviderId;
   model?: string;
   configuredProviders: { provider: ProviderId; model: string }[];
+  groups: { id: number; title?: string; color: TabGroupColor }[];
 };
 
 type SimpleResponse = { ok: true } | ({ ok: false } & ArkErrorPayload);
@@ -41,6 +42,11 @@ const modelElement = required<HTMLSelectElement>("#active-model");
 const testModelButton = required<HTMLButtonElement>("#test-model");
 const organiseButton = required<HTMLButtonElement>("#organise");
 const organiseLabel = required<HTMLElement>("#organise-label");
+const renameControl = required<HTMLDetailsElement>("#rename-control");
+const renameSummary = required<HTMLElement>("#rename-control summary");
+const renameFieldset = required<HTMLFieldSetElement>("#rename-fieldset");
+const renameList = required<HTMLElement>("#rename-list");
+const renameSubmit = required<HTMLButtonElement>("#rename-submit");
 const settingsButton = required<HTMLButtonElement>("#settings");
 const statusElement = required<HTMLElement>("#popup-status");
 const reasoningPanel = required<HTMLElement>("#reasoning-panel");
@@ -51,6 +57,7 @@ const reasoningElapsed = required<HTMLElement>("#reasoning-elapsed");
 
 let state: PopupState = { kind: "unconfigured", count: 0 };
 let configuredProviders: PopupStateResponse["configuredProviders"] = [];
+let groups: PopupStateResponse["groups"] = [];
 let active:
   | { providerId: ProviderId; provider: string; model: string }
   | undefined;
@@ -80,8 +87,7 @@ function clearReasoning(): void {
 
 function updateReasoningElapsed(): void {
   reasoningElapsed.textContent = `${(
-    (performance.now() - reasoningStarted) /
-    1000
+    (performance.now() - reasoningStarted) / 1000
   ).toFixed(1)} s`;
 }
 
@@ -111,6 +117,65 @@ function runtimeFailure(): ArkErrorPayload {
   });
 }
 
+function syncRenameButton(): void {
+  const selected = [
+    ...renameList.querySelectorAll<HTMLInputElement>(
+      "input[type=checkbox]:checked",
+    ),
+  ];
+  renameSubmit.disabled =
+    renameFieldset.disabled ||
+    selected.length === 0 ||
+    selected.some((checkbox) => {
+      const input = renameList.querySelector<HTMLInputElement>(
+        `input[type=text][data-group-id="${checkbox.value}"]`,
+      );
+      return !input?.value.trim();
+    });
+}
+
+function renderGroups(): void {
+  renameControl.hidden = groups.length === 0;
+  renameSummary.textContent = `${msg("renameGroups")} (${groups.length})`;
+  renameList.replaceChildren(
+    ...groups.map((group, index) => {
+      const row = document.createElement("div");
+      row.className = "rename-row";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = String(group.id);
+      checkbox.ariaLabel = msg(
+        "renameGroupSelection",
+        group.title?.trim() || `${msg("groupName")} ${index + 1}`,
+      );
+
+      const color = document.createElement("span");
+      color.className = "group-color";
+      color.dataset.color = group.color;
+      color.ariaHidden = "true";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.dataset.groupId = String(group.id);
+      input.value = group.title ?? "";
+      input.placeholder = msg("groupName");
+      input.ariaLabel = msg("groupName");
+      input.disabled = true;
+
+      checkbox.addEventListener("change", () => {
+        input.disabled = !checkbox.checked;
+        syncRenameButton();
+        if (checkbox.checked) input.focus();
+      });
+      input.addEventListener("input", syncRenameButton);
+      row.append(checkbox, color, input);
+      return row;
+    }),
+  );
+  syncRenameButton();
+}
+
 function appendReasoning(text: string): void {
   if (!text) return;
   if (reasoningPanel.hidden) {
@@ -133,6 +198,8 @@ function render(next: PopupState): void {
   testModelButton.hidden = modelElement.options.length === 0;
   modelElement.disabled = view.busy;
   testModelButton.disabled = view.busy;
+  renameFieldset.disabled = view.busy;
+  syncRenameButton();
   modelElement.title = modelElement.selectedOptions[0]?.textContent ?? "";
   organiseLabel.textContent = msg(view.buttonKey as MessageKey);
   organiseButton.disabled = view.buttonDisabled;
@@ -222,6 +289,67 @@ testModelButton.addEventListener("click", async () => {
   }
 });
 
+renameSubmit.addEventListener("click", async () => {
+  const renames = [
+    ...renameList.querySelectorAll<HTMLInputElement>(
+      "input[type=checkbox]:checked",
+    ),
+  ].map((checkbox) => ({
+    id: Number(checkbox.value),
+    title:
+      renameList
+        .querySelector<HTMLInputElement>(
+          `input[type=text][data-group-id="${checkbox.value}"]`,
+        )
+        ?.value.trim() ?? "",
+  }));
+  if (renames.length === 0 || renames.some(({ title }) => !title)) {
+    statusElement.textContent = msg("groupNameRequired");
+    statusElement.dataset.kind = "error";
+    return;
+  }
+
+  clearReasoning();
+  renameFieldset.disabled = true;
+  modelElement.disabled = true;
+  testModelButton.disabled = true;
+  organiseButton.disabled = true;
+  let failure: ArkErrorPayload | undefined;
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: "renameGroups",
+      renames,
+    })) as SimpleResponse;
+    if (!response.ok) failure = response;
+  } catch {
+    failure = errorPayload(undefined, "grouping_failed", {
+      stage: "transport",
+      reason: "request_failed",
+    });
+  } finally {
+    renameFieldset.disabled = false;
+    render(state);
+  }
+
+  if (failure) {
+    statusElement.textContent = msg("groupingFailed");
+    statusElement.dataset.kind = "error";
+    appendError(failure);
+    syncRenameButton();
+    return;
+  }
+
+  const titles = new Map(renames.map(({ id, title }) => [id, title]));
+  groups = groups.map((group) => ({
+    ...group,
+    title: titles.get(group.id) ?? group.title,
+  }));
+  renderGroups();
+  renameControl.open = false;
+  statusElement.textContent = msg("groupsRenamed", String(renames.length));
+  statusElement.dataset.kind = "success";
+});
+
 organiseButton.addEventListener("click", async () => {
   if (state.kind === "unconfigured" || !active) {
     await openOptions();
@@ -277,6 +405,8 @@ try {
     type: "popupState",
   })) as PopupStateResponse;
   configuredProviders = response.configuredProviders;
+  groups = response.groups;
+  renderGroups();
   modelElement.replaceChildren(
     ...configuredProviders.map(({ provider, model }) => {
       const option = document.createElement("option");

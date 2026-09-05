@@ -1,5 +1,10 @@
 import { defineBackground } from "wxt/utils/define-background";
-import type { BrowserGroup, BrowserTab, TabsPort } from "../src/grouping";
+import {
+  renameTabGroups,
+  type BrowserGroup,
+  type BrowserTab,
+  type TabsPort,
+} from "../src/grouping";
 import {
   createMessageHandler,
   createOrganisePortHandler,
@@ -83,6 +88,7 @@ export default defineBackground(() => {
   const handleMessage = createMessageHandler({
     loadSettings: () => loadSettings(storage),
     queryTabs: () => tabs.queryCurrentWindow(),
+    queryGroups: () => tabs.queryGroups(browser.windows.WINDOW_ID_CURRENT),
     testModel: () =>
       testActiveModel({
         storage,
@@ -93,6 +99,7 @@ export default defineBackground(() => {
     activateProvider: async (provider) => {
       await activateProvider(storage, provider);
     },
+    renameGroups: (renames) => renameTabGroups(tabs, renames),
   });
 
   browser.runtime.onMessage.addListener((message: unknown) => {

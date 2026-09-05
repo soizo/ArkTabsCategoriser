@@ -60,5 +60,11 @@
   "diagnosticOrigin": { "message": "接口" },
   "diagnosticProviderMessage": { "message": "服务商消息" },
   "diagnosticContext": { "message": "详情" },
+  "renameGroups": { "message": "重命名分组" },
+  "renameGroupSelection": { "message": "选择 $1 进行重命名" },
+  "groupName": { "message": "分组名称" },
+  "renameSelectedGroups": { "message": "重命名所选分组" },
+  "groupsRenamed": { "message": "已重命名 $1 个分组。" },
+  "groupNameRequired": { "message": "请为每个所选分组输入名称。" },
   "dataSentShort": { "message": "发送标题和完整 URL" }
 }

@@ -8,7 +8,7 @@ function messages(locale: "en" | "zh_CN"): Record<string, { message: string }> {
 }
 
 describe("locale messages", () => {
-  it("keeps English and Chinese diagnostic console keys aligned", () => {
+  it("keeps required English and Chinese UI keys aligned", () => {
     const en = messages("en");
     const zh = messages("zh_CN");
     const keys = [
@@ -19,6 +19,12 @@ describe("locale messages", () => {
       "diagnosticOrigin",
       "diagnosticProviderMessage",
       "diagnosticContext",
+      "renameGroups",
+      "renameGroupSelection",
+      "groupName",
+      "renameSelectedGroups",
+      "groupsRenamed",
+      "groupNameRequired",
     ];
 
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());

@@ -39,11 +39,16 @@ The popup is 360px wide. Reading order is fixed:
 3. Native selector for configured provider/model combinations plus a secondary
    connectivity test
 4. One full-width organising action
-5. Conditional transient output for OpenRouter reasoning or safe diagnostics
-6. Status or recovery guidance
-7. Data-sharing disclosure
+5. Compact multi-select renaming for existing groups
+6. Conditional transient output for OpenRouter reasoning or safe diagnostics
+7. Status or recovery guidance
+8. Data-sharing disclosure
 
 The count is the focal point. The primary button must remain reachable and visually singular. Reserve status height to avoid layout jumps between idle, working, success, and error states.
+
+Existing groups can be renamed from one compact disclosure below the primary
+action. Selected rows enable their own name fields, and the bounded list scrolls
+rather than displacing the primary task.
 
 The model controls share one quiet inset region. The output region appears
 after displayable reasoning or an error, scrolls internally, and is never

@@ -30,7 +30,7 @@ API keys and provider settings are stored in `chrome.storage.local`. This keeps 
 Ark requires:
 
 - `tabs` — read current-window tab titles, URLs, pin state, and group membership.
-- `tabGroups` — replace native groups after validating the complete model response.
+- `tabGroups` — organise native groups and rename selected existing groups.
 - `storage` — keep provider settings locally.
 
 Provider network origins are optional permissions. Ark requests only the selected provider origin from a direct settings-page action. Custom endpoints require HTTPS, except loopback HTTP for `localhost` or `127.0.0.1`.
@@ -71,6 +71,8 @@ The unpacked build is generated under `.output/chrome-mv3/`. WXT also creates th
 7. Save settings and approve access to that API origin.
 
 Open Ark from Chrome's toolbar, choose any configured provider/model, and select **Organise tabs**. Ark validates that every eligible tab appears exactly once across generated groups and explicitly ungrouped tabs, then confirms the tab set has not changed before modifying groups.
+
+The Popup also lets you select several existing groups, edit each name, and apply the renames together. If Chrome rejects a later rename, Ark restores earlier names where possible.
 
 When OpenRouter returns displayable reasoning while organising, the Popup shows
 it as a transient live panel. Ark does not store or log that reasoning, hides

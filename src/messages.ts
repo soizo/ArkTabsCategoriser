@@ -1,16 +1,16 @@
 import type { ProviderId } from "./domain";
-import {
-  errorPayload,
-  type ArkErrorPayload,
-} from "./errors";
-import type { BrowserTab } from "./grouping";
+import { errorPayload, type ArkErrorPayload } from "./errors";
+import type { BrowserGroup, BrowserTab } from "./grouping";
 import type { ArkSettings } from "./settings";
+
+type GroupRename = { id: number; title: string };
 
 export type RuntimeMessage =
   | { type: "popupState" }
   | { type: "testModel" }
   | { type: "openOptions" }
-  | { type: "activateProvider"; provider: ProviderId };
+  | { type: "activateProvider"; provider: ProviderId }
+  | { type: "renameGroups"; renames: GroupRename[] };
 
 export type RuntimeResponse =
   | {
@@ -19,6 +19,7 @@ export type RuntimeResponse =
       provider?: ProviderId;
       model?: string;
       configuredProviders: { provider: ProviderId; model: string }[];
+      groups: Array<Pick<BrowserGroup, "id" | "title" | "color">>;
     }
   | { ok: true }
   | ({ ok: false } & ArkErrorPayload);
@@ -26,9 +27,11 @@ export type RuntimeResponse =
 export type MessageDeps = {
   loadSettings(): Promise<ArkSettings>;
   queryTabs(): Promise<BrowserTab[]>;
+  queryGroups(): Promise<BrowserGroup[]>;
   testModel(): Promise<void>;
   openOptions(): Promise<void>;
   activateProvider(provider: ProviderId): Promise<void>;
+  renameGroups(renames: GroupRename[]): Promise<void>;
 };
 
 export type OrganisePortOutbound =
@@ -58,9 +61,10 @@ export function createMessageHandler(
 ): (message: RuntimeMessage) => Promise<RuntimeResponse> {
   return async (message) => {
     if (message.type === "popupState") {
-      const [settings, tabs] = await Promise.all([
+      const [settings, tabs, groups] = await Promise.all([
         deps.loadSettings(),
         deps.queryTabs(),
+        deps.queryGroups(),
       ]);
       const provider = settings.activeProvider;
       const model = provider ? settings.providers[provider]?.model : undefined;
@@ -80,6 +84,11 @@ export function createMessageHandler(
         count: tabs.filter(({ pinned }) => !pinned).length,
         ...(provider && model ? { provider, model } : {}),
         configuredProviders,
+        groups: groups.map(({ id, title, color }) => ({
+          id,
+          ...(title === undefined ? {} : { title }),
+          color,
+        })),
       };
     }
 
@@ -91,6 +100,21 @@ export function createMessageHandler(
     if (message.type === "activateProvider") {
       await deps.activateProvider(message.provider);
       return { ok: true };
+    }
+
+    if (message.type === "renameGroups") {
+      try {
+        await deps.renameGroups(message.renames);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          ...errorPayload(error, "grouping_failed", {
+            stage: "grouping",
+            reason: "chrome_rejected",
+          }),
+        };
+      }
     }
 
     if (message.type === "testModel") {

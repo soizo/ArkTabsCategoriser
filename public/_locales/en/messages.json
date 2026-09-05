@@ -60,5 +60,11 @@
   "diagnosticOrigin": { "message": "Endpoint" },
   "diagnosticProviderMessage": { "message": "Provider message" },
   "diagnosticContext": { "message": "Detail" },
+  "renameGroups": { "message": "Rename groups" },
+  "renameGroupSelection": { "message": "Select $1 for renaming" },
+  "groupName": { "message": "Group name" },
+  "renameSelectedGroups": { "message": "Rename selected groups" },
+  "groupsRenamed": { "message": "Renamed $1 groups." },
+  "groupNameRequired": { "message": "Enter a name for every selected group." },
   "dataSentShort": { "message": "Sends titles + full URLs" }
 }

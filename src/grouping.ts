@@ -109,6 +109,53 @@ async function restoreGroups(
   }
 }
 
+export async function renameTabGroups(
+  port: TabsPort,
+  renames: Array<{ id: number; title: string }>,
+): Promise<void> {
+  if (renames.length === 0) return;
+
+  const tabs = await port.queryCurrentWindow();
+  const windowId = tabs[0]?.windowId;
+  const groups = windowId === undefined ? [] : await port.queryGroups(windowId);
+  const existing = new Map(groups.map((group) => [group.id, group]));
+  const seen = new Set<number>();
+  const selected = renames.map(({ id, title }) => {
+    const group = existing.get(id);
+    const nextTitle = title.trim();
+    if (!group || seen.has(id) || !nextTitle) {
+      throw new ArkError("grouping_failed", {
+        stage: "grouping",
+        reason: "chrome_rejected",
+        context: "A selected tab group is no longer available or has no name",
+      });
+    }
+    seen.add(id);
+    return { id, title: nextTitle, previousTitle: group.title ?? "" };
+  });
+  const updated: typeof selected = [];
+
+  try {
+    for (const rename of selected) {
+      await port.updateGroup(rename.id, { title: rename.title });
+      updated.push(rename);
+    }
+  } catch {
+    for (const rename of updated.toReversed()) {
+      try {
+        await port.updateGroup(rename.id, { title: rename.previousTitle });
+      } catch {
+        // Best-effort restoration cannot safely do more after Chrome rejects it.
+      }
+    }
+    throw new ArkError("grouping_failed", {
+      stage: "grouping",
+      reason: "chrome_rejected",
+      context: "Chrome rejected a tab-group rename",
+    });
+  }
+}
+
 export async function applyCategorisation(
   port: TabsPort,
   initialTabs: TabInput[],

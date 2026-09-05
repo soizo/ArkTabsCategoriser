@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCategorisation,
+  renameTabGroups,
   type BrowserGroup,
   type BrowserTab,
   type TabsPort,
@@ -67,6 +68,7 @@ function createTabsPort(
     tabs?: BrowserTab[];
     failOnGroupCall?: number;
     failOnUngroup?: boolean;
+    failOnUpdateCall?: number;
   } = {},
 ): TabsPort & {
   tabs: BrowserTab[];
@@ -80,6 +82,7 @@ function createTabsPort(
   const mutations: string[] = [];
   let nextGroupId = 100;
   let groupCalls = 0;
+  let updateCalls = 0;
 
   return {
     tabs,
@@ -116,6 +119,11 @@ function createTabsPort(
       }
     },
     async updateGroup(groupId, changes) {
+      updateCalls += 1;
+      if (updateCalls === options.failOnUpdateCall) {
+        options.failOnUpdateCall = undefined;
+        throw new Error("Chrome update failure");
+      }
       const group = groups.get(groupId);
       if (!group) throw new Error("Unknown group");
       groups.set(groupId, { ...group, ...changes });
@@ -123,6 +131,46 @@ function createTabsPort(
     },
   };
 }
+
+describe("renameTabGroups", () => {
+  it("renames each selected group", async () => {
+    const port = createTabsPort();
+    port.groups.set(6, {
+      id: 6,
+      title: "Reading",
+      color: "green",
+      collapsed: false,
+    });
+
+    await renameTabGroups(port, [
+      { id: 5, title: "Research" },
+      { id: 6, title: "Articles" },
+    ]);
+
+    expect(port.groups.get(5)?.title).toBe("Research");
+    expect(port.groups.get(6)?.title).toBe("Articles");
+  });
+
+  it("restores earlier names when Chrome rejects a later rename", async () => {
+    const port = createTabsPort({ failOnUpdateCall: 2 });
+    port.groups.set(6, {
+      id: 6,
+      title: "Reading",
+      color: "green",
+      collapsed: false,
+    });
+
+    await expect(
+      renameTabGroups(port, [
+        { id: 5, title: "Research" },
+        { id: 6, title: "Articles" },
+      ]),
+    ).rejects.toMatchObject({ code: "grouping_failed" });
+
+    expect(port.groups.get(5)?.title).toBe("Original");
+    expect(port.groups.get(6)?.title).toBe("Reading");
+  });
+});
 
 describe("applyCategorisation", () => {
   it("replaces eligible memberships and applies deterministic group metadata", async () => {

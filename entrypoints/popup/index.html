@@ -68,6 +68,25 @@
         </svg>
       </button>
 
+      <details id="rename-control" class="rename-control" hidden>
+        <summary data-i18n="renameGroups">Rename groups</summary>
+        <fieldset id="rename-fieldset">
+          <legend class="sr-only" data-i18n="renameGroups">
+            Rename groups
+          </legend>
+          <div id="rename-list" class="rename-list"></div>
+          <button
+            id="rename-submit"
+            class="rename-submit"
+            type="button"
+            data-i18n="renameSelectedGroups"
+            disabled
+          >
+            Rename selected groups
+          </button>
+        </fieldset>
+      </details>
+
       <section
         id="reasoning-panel"
         class="reasoning-panel"

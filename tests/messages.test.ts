@@ -5,7 +5,7 @@ import {
   createOrganisePortHandler,
   type MessageDeps,
 } from "../src/messages";
-import type { BrowserTab } from "../src/grouping";
+import type { BrowserGroup, BrowserTab } from "../src/grouping";
 import type { ProviderId } from "../src/domain";
 import type { ArkSettings } from "../src/settings";
 
@@ -13,10 +13,19 @@ function deps(
   options: {
     settings?: ArkSettings;
     tabs?: BrowserTab[];
+    groups?: BrowserGroup[];
     testModel?: () => Promise<void>;
   } = {},
-): MessageDeps & { opened: boolean; activated?: ProviderId } {
-  const subject: MessageDeps & { opened: boolean; activated?: ProviderId } = {
+): MessageDeps & {
+  opened: boolean;
+  activated?: ProviderId;
+  renamed?: { id: number; title: string }[];
+} {
+  const subject: MessageDeps & {
+    opened: boolean;
+    activated?: ProviderId;
+    renamed?: { id: number; title: string }[];
+  } = {
     opened: false,
     async loadSettings() {
       return options.settings ?? { providers: {} };
@@ -24,12 +33,18 @@ function deps(
     async queryTabs() {
       return options.tabs ?? [];
     },
+    async queryGroups() {
+      return options.groups ?? [];
+    },
     testModel: options.testModel ?? (async () => {}),
     async openOptions() {
       subject.opened = true;
     },
     async activateProvider(provider) {
       subject.activated = provider;
+    },
+    async renameGroups(renames) {
+      subject.renamed = renames;
     },
   };
   return subject;
@@ -50,7 +65,7 @@ describe("background messages", () => {
           id: 1,
           windowId: 1,
           pinned: false,
-          groupId: -1,
+          groupId: 5,
           title: "One",
           url: "https://one.example",
         },
@@ -63,6 +78,7 @@ describe("background messages", () => {
           url: "https://pinned.example",
         },
       ],
+      groups: [{ id: 5, title: "Work", color: "blue", collapsed: false }],
     });
 
     await expect(
@@ -76,6 +92,7 @@ describe("background messages", () => {
         { provider: "openai", model: "gpt-4.1" },
         { provider: "openrouter", model: "anthropic/claude-sonnet-4" },
       ],
+      groups: [{ id: 5, title: "Work", color: "blue" }],
     });
   });
 
@@ -89,6 +106,19 @@ describe("background messages", () => {
       }),
     ).resolves.toEqual({ ok: true });
     expect(subject.activated).toBe("gemini");
+  });
+
+  it("renames selected groups from the popup", async () => {
+    const subject = deps();
+    const renames = [
+      { id: 5, title: "Research" },
+      { id: 8, title: "Reading" },
+    ];
+
+    await expect(
+      createMessageHandler(subject)({ type: "renameGroups", renames }),
+    ).resolves.toEqual({ ok: true });
+    expect(subject.renamed).toEqual(renames);
   });
 
   it("opens the extension options page", async () => {
