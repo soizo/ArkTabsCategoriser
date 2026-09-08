@@ -81,7 +81,7 @@ async function snapshotGroups(
         throw new ArkError("grouping_failed", {
           stage: "grouping",
           reason: "chrome_rejected",
-          context: "Chrome did not return existing group metadata",
+          context: "The browser did not return existing group metadata",
         });
       const metadata: GroupSnapshot["metadata"] = {
         color: group.color,
@@ -151,7 +151,7 @@ export async function renameTabGroups(
     throw new ArkError("grouping_failed", {
       stage: "grouping",
       reason: "chrome_rejected",
-      context: "Chrome rejected a tab-group rename",
+      context: "The browser rejected a tab-group rename",
     });
   }
 }
@@ -214,7 +214,7 @@ export async function applyCategorisation(
       reason: "chrome_rejected",
       context:
         sanitiseProviderMessage(error instanceof Error ? error.message : "") ??
-        "Chrome rejected a tab-group change",
+        "The browser rejected a tab-group change",
     });
   }
 }

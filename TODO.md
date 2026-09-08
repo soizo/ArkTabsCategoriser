@@ -1,3 +1,17 @@
+# Firefox compatibility
+
+- [x] Approve a shared WXT Manifest V3 implementation; target Firefox 140+ desktop for native data-transmission consent.
+- [x] Create `feat/firefox-support`; verify and commit the pre-existing work separately (206 tests, typecheck, Chrome build).
+- [x] Reproduce missing Firefox manifest configuration and implicit group-window selection with failing tests.
+- [x] Add Firefox packaging, neutral browser wording, and operating documentation.
+- [x] Reproduce Firefox's rejection of port-bearing permission patterns; share the corrected pattern between requesting and checking access, retaining the exact API endpoint and Chrome behavior.
+- [x] Verify both builds and native Firefox permissions/grouping/background tasks.
+  - `npm run verify`: 215 tests across 18 files, typecheck, Chrome build, and Firefox build passed.
+  - `ruff check tests/firefox.browser.py` and `python3 tests/firefox.browser.py` passed on Firefox 155.0.1: initial permission isolation, settings save with a custom port, native groups/colors, original-window targeting, pinned-tab exclusion, 40 seconds without an extension view, reconnect without another request, session privacy, rename, cancellation, and final popup task state.
+  - `npm run zip:firefox` and `git diff --check` passed. The ZIP remains unsigned; no store upload or signing was performed.
+  - Native tests use a disposable profile and a loopback fake provider. Visible consent dialogs, Firefox 140 itself, and live providers were not tested.
+  - Keep adaptation in a separate local commit; do not push.
+
 # Streaming and background task lifecycle
 
 - [x] Reproduce duplicated reasoning fields and inspect timeout/port lifetime.

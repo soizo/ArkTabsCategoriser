@@ -38,7 +38,12 @@ export function providerOrigin(
 }
 
 function originPermission(provider: ProviderId, settings: ProviderSettings): PermissionOrigins {
-  return { origins: [`${providerOrigin(provider, settings)}/*`] };
+  const origin = providerOrigin(provider, settings);
+  // Strip only the validated origin's trailing port; API requests stay unchanged.
+  const patternOrigin = import.meta.env.BROWSER === "firefox"
+    ? origin.replace(/:\d+$/, "")
+    : origin;
+  return { origins: [`${patternOrigin}/*`] };
 }
 
 export async function requestProviderPermission(
@@ -47,7 +52,7 @@ export async function requestProviderPermission(
   settings: ProviderSettings,
 ): Promise<void> {
   const origin = providerOrigin(provider, settings);
-  if (!(await permissions.request({ origins: [`${origin}/*`] }))) {
+  if (!(await permissions.request(originPermission(provider, settings)))) {
     throw new ArkError("permission_denied", {
       stage: "permission",
       reason: "permission_denied",

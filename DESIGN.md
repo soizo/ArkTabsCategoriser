@@ -1,6 +1,6 @@
 # Ark Design System
 
-Ark uses a restrained Chrome utility language inspired by Arc's calm density without copying Arc layouts, trademarks, or assets. The organising task stays visually dominant; decorative glass, gradients, and motion do not compete with it.
+Ark uses a restrained browser utility language inspired by Arc's calm density without copying Arc layouts, trademarks, or assets. The organising task stays visually dominant; decorative glass, gradients, and motion do not compete with it.
 
 ## Colour
 
@@ -52,7 +52,7 @@ rather than displacing the primary task.
 
 The model controls share one quiet inset region, including model-test feedback
 and its diagnostic output. Organisation output belongs below the task controls.
-Stop stays visible but disabled during cancellation or the final Chrome commit;
+Stop stays visible but disabled during cancellation or the final tab-group commit;
 nearby text explains why. Reopened popups show the running task's actual model,
 original-window count, and original elapsed time rather than starting again.
 

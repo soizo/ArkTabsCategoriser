@@ -100,7 +100,10 @@ it("keeps the actual background grouping flow pinned to the starting window afte
   expect(query.mock.calls.length).toBeGreaterThan(1);
   for (const [filter] of query.mock.calls)
     expect(filter).toEqual({ windowId: 7 });
-  expect(group).toHaveBeenCalledWith({ tabIds: [71, 72] });
+  expect(group).toHaveBeenCalledWith({
+    tabIds: [71, 72],
+    createProperties: { windowId: 7 },
+  });
   expect(JSON.stringify(session.set.mock.calls)).not.toContain("test-key");
   expect(JSON.stringify(session.set.mock.calls)).not.toContain(
     "https://example.test",

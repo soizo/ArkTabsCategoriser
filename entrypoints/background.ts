@@ -65,7 +65,11 @@ function tabsForWindow(windowId?: number): TabsPort {
       collapsed: group.collapsed,
     }));
   },
-  group: (tabIds) => browser.tabs.group({ tabIds: nonEmptyTabIds(tabIds) }),
+  group: (tabIds) => browser.tabs.group({
+    tabIds: nonEmptyTabIds(tabIds),
+    // Firefox otherwise creates the group in the currently focused window.
+    ...(windowId === undefined ? {} : { createProperties: { windowId } }),
+  }),
   ungroup: async (tabIds) => {
     await browser.tabs.ungroup(nonEmptyTabIds(tabIds));
   },

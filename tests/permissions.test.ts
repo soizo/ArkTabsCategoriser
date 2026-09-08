@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasProviderPermission,
   providerOrigin,
@@ -8,6 +8,8 @@ import {
 import type { ProviderSettings } from "../src/settings";
 
 const settings: ProviderSettings = { apiKey: "key", model: "model" };
+
+afterEach(() => vi.unstubAllEnvs());
 
 function permissionsPort(
   result: boolean,
@@ -65,6 +67,27 @@ describe("providerOrigin", () => {
 });
 
 describe("provider permissions", () => {
+  it.each([
+    ["firefox", "http://localhost:11434/v1", "http://localhost/*"],
+    ["firefox", "http://127.0.0.1:8080/v1", "http://127.0.0.1/*"],
+    ["firefox", "https://llm.example:8443/v1", "https://llm.example/*"],
+    ["firefox", "https://[::1]:8443/v1", "https://[::1]/*"],
+    ["firefox", "https://[::1]/v1", "https://[::1]/*"],
+    ["chrome", "http://localhost:11434/v1", "http://localhost:11434/*"],
+    ["chrome", "https://llm.example:8443/v1", "https://llm.example:8443/*"],
+  ])("uses a supported %s permission pattern for %s", async (browser, baseUrl, pattern) => {
+    vi.stubEnv("BROWSER", browser);
+    const port = permissionsPort(true);
+    const custom = { ...settings, baseUrl };
+
+    await requestProviderPermission(port, "custom", custom);
+    await expect(hasProviderPermission(port, "custom", custom)).resolves.toBe(true);
+
+    expect(port.requested).toEqual([[pattern]]);
+    expect(port.checked).toEqual([[pattern]]);
+    expect(custom.baseUrl).toBe(baseUrl);
+  });
+
   it("requests only the selected provider origin", async () => {
     const port = permissionsPort(true);
 
