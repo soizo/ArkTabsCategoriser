@@ -1,5 +1,6 @@
-import { defaultSystemPrompt } from "./categorisation";
+import { composeSystemPrompt } from "./categorisation";
 import type { Categorisation, ProviderId, TabInput } from "./domain";
+import type { OrganiseInfo } from "./messages";
 import { ArkError } from "./errors";
 import {
   applyCategorisation,
@@ -22,7 +23,14 @@ export type OrganiseDeps = {
   locale: string;
   timeoutMs?: number;
   onReasoning?: (text: string) => void;
+  signal?: AbortSignal;
+  onApplying?: () => void;
+  onInfo?: (info: OrganiseInfo) => void;
 };
+
+function checkCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new ArkError("cancelled", { stage: "request", reason: "cancelled" });
+}
 
 function isAbort(error: unknown, signal: AbortSignal): boolean {
   return (
@@ -112,7 +120,7 @@ function promptWithGroups(
 ): string {
   if (!result.groups.length) return systemPrompt;
   const names = result.groups.map(({ name }) => name);
-  return `${systemPrompt} Earlier batches used these group names: ${JSON.stringify(names)}. Reuse an exact existing name when appropriate. Add at most ${8 - names.length} new group names.`;
+  return `${systemPrompt}\n\n## Batch context (application constraints)\nEarlier batches used these group names: ${JSON.stringify(names)}. Reuse an exact existing name when appropriate. Add at most ${8 - names.length} new group names.`;
 }
 
 function mergeCategorisation(
@@ -146,11 +154,8 @@ async function requestCategorisation(
   tabs: TabInput[],
   systemPrompt?: string,
 ): Promise<Categorisation> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    deps.timeoutMs ?? 60_000,
-  );
+  const signal = deps.signal ?? new AbortController().signal;
+  checkCancelled(signal);
   try {
     return await deps
       .providerFor(providerId)
@@ -158,12 +163,14 @@ async function requestCategorisation(
         settings,
         tabs,
         deps.locale,
-        controller.signal,
+        signal,
         systemPrompt,
         deps.onReasoning,
+        deps.timeoutMs,
       );
   } catch (error) {
-    if (isAbort(error, controller.signal))
+    checkCancelled(signal);
+    if (isAbort(error, signal))
       throw new ArkError("timeout", {
         stage: "request",
         reason: "timeout",
@@ -173,8 +180,6 @@ async function requestCategorisation(
       stage: "request",
       reason: "request_failed",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -198,7 +203,9 @@ async function applyResult(
 export async function organiseTabs(
   deps: OrganiseDeps,
 ): Promise<{ groupCount: number; ungroupedCount: number }> {
+  checkCancelled(deps.signal);
   const stored = await loadSettings(deps.storage);
+  checkCancelled(deps.signal);
   const providerId = stored.activeProvider;
   const settings = providerId ? stored.providers[providerId] : undefined;
   if (!providerId || !settings)
@@ -215,16 +222,24 @@ export async function organiseTabs(
     });
   }
 
+  checkCancelled(deps.signal);
   const eligible = eligibleTabs(await deps.tabs.queryCurrentWindow());
+  checkCancelled(deps.signal);
+  deps.onInfo?.({ count: eligible.length, provider: providerId, model: settings.model });
   if (eligible.length < 2) return { groupCount: 0, ungroupedCount: 0 };
 
-  const systemPrompt = stored.systemPrompt ?? defaultSystemPrompt(deps.locale);
+  const systemPrompt = composeSystemPrompt(
+    deps.locale,
+    stored.classificationRequirements,
+    stored.knowledge,
+  );
   const pending = settings.inputTokenLimit
     ? batchesForLimit(eligible, systemPrompt, settings.inputTokenLimit)
     : [eligible];
   const result: Categorisation = { groups: [], ungroupedTabIds: [] };
 
   while (pending.length) {
+    checkCancelled(deps.signal);
     const batch = pending.shift();
     if (!batch) break;
     const prompt = promptWithGroups(systemPrompt, result);
@@ -250,6 +265,8 @@ export async function organiseTabs(
     }
   }
 
+  checkCancelled(deps.signal);
+  deps.onApplying?.();
   await applyResult(deps.tabs, eligible, result);
   return {
     groupCount: result.groups.length,

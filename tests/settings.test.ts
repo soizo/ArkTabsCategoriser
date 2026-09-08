@@ -88,18 +88,22 @@ describe("provider settings", () => {
     expect(storage.snapshot()).toEqual({});
   });
 
-  it("stores one global edited system prompt with provider settings", async () => {
+  it("stores global classification requirements and Knowledge with provider settings", async () => {
     const storage = createStorage();
 
     await saveProvider(
       storage,
       "openai",
       { apiKey: "key", model: "gpt-4.1" },
-      "  My complete prompt  ",
+      {
+        classificationRequirements: "My requirements",
+        knowledge: "foo.internal is our project tracker.",
+      },
     );
 
     await expect(loadSettings(storage)).resolves.toMatchObject({
-      systemPrompt: "My complete prompt",
+      classificationRequirements: "My requirements",
+      knowledge: "foo.internal is our project tracker.",
     });
   });
 
@@ -109,7 +113,7 @@ describe("provider settings", () => {
       storage,
       "openai",
       { apiKey: "openai-key", model: "gpt-4.1" },
-      "Prompt",
+      { classificationRequirements: "Prompt", knowledge: "Project context" },
     );
     await saveProvider(storage, "anthropic", {
       apiKey: "anthropic-key",
@@ -118,12 +122,80 @@ describe("provider settings", () => {
 
     await expect(activateProvider(storage, "openai")).resolves.toMatchObject({
       activeProvider: "openai",
-      systemPrompt: "Prompt",
+      classificationRequirements: "Prompt",
+      knowledge: "Project context",
       providers: {
         openai: { apiKey: "openai-key", model: "gpt-4.1" },
         anthropic: { apiKey: "anthropic-key", model: "claude-sonnet-4" },
       },
     });
+  });
+
+  it("migrates a legacy prompt verbatim without writing during load", async () => {
+    const legacy = "  Old custom prompt\nKeep these rules.  ";
+    const storage = createStorage({
+      arkSettings: { providers: {}, systemPrompt: legacy },
+    });
+    await expect(loadSettings(storage)).resolves.toEqual({
+      providers: {},
+      classificationRequirements: legacy,
+    });
+    expect(storage.snapshot()).toEqual({
+      arkSettings: { providers: {}, systemPrompt: legacy },
+    });
+    await saveProvider(storage, "openai", { apiKey: "key", model: "model" });
+    expect(storage.snapshot().arkSettings).toMatchObject({
+      classificationRequirements: legacy,
+    });
+    expect(storage.snapshot().arkSettings).not.toHaveProperty("systemPrompt");
+  });
+
+  it("prefers new requirements over the legacy prompt and ignores malformed Knowledge", async () => {
+    const storage = createStorage({
+      arkSettings: {
+        providers: {},
+        systemPrompt: "Legacy",
+        classificationRequirements: "New",
+        knowledge: 42,
+      },
+    });
+    await expect(loadSettings(storage)).resolves.toEqual({
+      providers: {},
+      classificationRequirements: "New",
+    });
+  });
+
+  it("can clear saved Knowledge without reviving its previous contents", async () => {
+    const storage = createStorage();
+    await saveProvider(
+      storage,
+      "openai",
+      { apiKey: "key", model: "model" },
+      { classificationRequirements: "Rules", knowledge: "Old knowledge" },
+    );
+    await saveProvider(
+      storage,
+      "openai",
+      { apiKey: "key", model: "model" },
+      { classificationRequirements: "Rules", knowledge: "" },
+    );
+    await expect(loadSettings(storage)).resolves.toMatchObject({
+      classificationRequirements: "Rules",
+      knowledge: "",
+    });
+  });
+
+  it("rejects blank requirements without overwriting saved data", async () => {
+    const storage = createStorage();
+    await expect(
+      saveProvider(
+        storage,
+        "openai",
+        { apiKey: "key", model: "model" },
+        { classificationRequirements: "  ", knowledge: "Context" },
+      ),
+    ).rejects.toThrow();
+    expect(storage.snapshot()).toEqual({});
   });
 
   it("trims saved fields without changing the custom base path", async () => {

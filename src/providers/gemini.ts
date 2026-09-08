@@ -1,7 +1,5 @@
-import {
-  buildCategorisationPrompt,
-  parseCategorisation,
-} from "../categorisation";
+import { buildCategorisationPrompt } from "../categorisation";
+import { categoriseWithRecovery } from "../categorisation-recovery";
 import { ArkError } from "../errors";
 import type { ProviderSettings } from "../settings";
 import {
@@ -109,29 +107,47 @@ export function createGeminiProvider(fetchImpl: Fetch): Provider {
       candidateText(value);
     },
 
-    async categorise(settings, tabs, locale, signal, systemPrompt) {
+    async categorise(
+      settings,
+      tabs,
+      locale,
+      signal,
+      systemPrompt,
+      _onReasoning,
+      timeoutMs,
+    ) {
       const prompt = buildCategorisationPrompt(tabs, locale, systemPrompt);
       const model = settings.model.replace(/^models\//, "");
-      const value = await requestJson(
-        fetchImpl,
-        `${BASE_URL}/models/${encodeURIComponent(model)}:generateContent`,
-        {
-          method: "POST",
-          headers: headers(settings),
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: prompt.system }] },
-            contents: [{ role: "user", parts: [{ text: prompt.user }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0,
-            },
-          }),
-        },
-        signal,
-      );
-      return parseCategorisation(
-        candidateText(value),
+      return categoriseWithRecovery(
+        prompt,
         tabs.map(({ id }) => id),
+        async (currentPrompt, requestSignal, _repair, onActivity) =>
+          candidateText(
+            await requestJson(
+              fetchImpl,
+              `${BASE_URL}/models/${encodeURIComponent(model)}:generateContent`,
+              {
+                method: "POST",
+                headers: headers(settings),
+                body: JSON.stringify({
+                  systemInstruction: {
+                    parts: [{ text: currentPrompt.system }],
+                  },
+                  contents: [
+                    { role: "user", parts: [{ text: currentPrompt.user }] },
+                  ],
+                  generationConfig: {
+                    responseMimeType: "application/json",
+                    temperature: 0,
+                  },
+                }),
+              },
+              requestSignal,
+              onActivity,
+            ),
+          ),
+        signal,
+        timeoutMs,
       );
     },
   };

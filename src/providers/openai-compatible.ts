@@ -1,7 +1,5 @@
-import {
-  buildCategorisationPrompt,
-  parseCategorisation,
-} from "../categorisation";
+import { buildCategorisationPrompt } from "../categorisation";
+import { categoriseWithRecovery } from "../categorisation-recovery";
 import type { Categorisation, ProviderId } from "../domain";
 import { ArkError, sanitiseProviderMessage } from "../errors";
 import { readSseData } from "../sse";
@@ -124,9 +122,7 @@ function reasoningFragments(delta: Record<string, unknown>): string[] {
       ? [delta.reasoning]
       : [];
   if (!Array.isArray(delta.reasoning_details)) return legacy;
-  return [
-    ...legacy,
-    ...delta.reasoning_details.flatMap((detail) => {
+  const details = delta.reasoning_details.flatMap((detail) => {
       if (!isRecord(detail)) return [];
       if (detail.type === "reasoning.text" && typeof detail.text === "string") {
         return detail.text ? [detail.text] : [];
@@ -138,8 +134,8 @@ function reasoningFragments(delta: Record<string, unknown>): string[] {
         return detail.summary ? [detail.summary] : [];
       }
       return [];
-    }),
-  ];
+    });
+  return details.length ? details : legacy;
 }
 
 async function streamedCompletion(
@@ -245,48 +241,55 @@ export function createOpenAICompatibleProvider(
       signal,
       systemPrompt,
       onReasoning,
+      timeoutMs,
     ): Promise<Categorisation> {
       const config = configFor(id, settings);
       const prompt = buildCategorisationPrompt(tabs, locale, systemPrompt);
-      const body: Record<string, unknown> = {
-        model: settings.model,
-        messages: [
-          { role: "system", content: prompt.system },
-          { role: "user", content: prompt.user },
-        ],
-        temperature: 0,
-      };
-      if (config.structuredOutput)
-        body.response_format = { type: "json_object" };
-      const stream = id === "openrouter" && onReasoning;
-      if (stream) body.stream = true;
-
-      const init = {
-        method: "POST",
-        headers: headers(settings, config),
-        body: JSON.stringify(body),
-      };
-      const text = stream
-        ? await streamedCompletion(
-            await requestResponse(
-              fetchImpl,
-              endpoint(config, config.chatPath),
-              init,
-              signal,
-            ),
-            onReasoning,
-          )
-        : completionText(
-            await requestJson(
-              fetchImpl,
-              endpoint(config, config.chatPath),
-              init,
-              signal,
-            ),
-          );
-      return parseCategorisation(
-        text,
+      return categoriseWithRecovery(
+        prompt,
         tabs.map(({ id: tabId }) => tabId),
+        async (currentPrompt, requestSignal, repair, onActivity) => {
+          const body: Record<string, unknown> = {
+            model: settings.model,
+            messages: [
+              { role: "system", content: currentPrompt.system },
+              { role: "user", content: currentPrompt.user },
+            ],
+            temperature: 0,
+          };
+          if (config.structuredOutput)
+            body.response_format = { type: "json_object" };
+          // Repair output stays private; only the initial generation streams reasoning.
+          const stream = !repair && id === "openrouter" && onReasoning;
+          if (stream) body.stream = true;
+          const init = {
+            method: "POST",
+            headers: headers(settings, config),
+            body: JSON.stringify(body),
+          };
+          return stream
+            ? streamedCompletion(
+                await requestResponse(
+                  fetchImpl,
+                  endpoint(config, config.chatPath),
+                  init,
+                  requestSignal,
+                  onActivity,
+                ),
+                onReasoning,
+              )
+            : completionText(
+                await requestJson(
+                  fetchImpl,
+                  endpoint(config, config.chatPath),
+                  init,
+                  requestSignal,
+                  onActivity,
+                ),
+              );
+        },
+        signal,
+        timeoutMs,
       );
     },
   };

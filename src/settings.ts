@@ -10,7 +10,8 @@ export type ProviderSettings = {
 export type ArkSettings = {
   activeProvider?: ProviderId;
   providers: Partial<Record<ProviderId, ProviderSettings>>;
-  systemPrompt?: string;
+  classificationRequirements?: string;
+  knowledge?: string;
 };
 
 export type StorageArea = {
@@ -65,14 +66,21 @@ export async function loadSettings(storage: StorageArea): Promise<ArkSettings> {
   const activeProvider = PROVIDERS.find(
     (provider) => provider === stored.activeProvider && providers[provider],
   );
-  const systemPrompt =
-    typeof stored.systemPrompt === "string" && stored.systemPrompt.trim()
-      ? stored.systemPrompt
-      : undefined;
+  // Read legacy prompts verbatim; the next explicit save writes the new shape.
+  const classificationRequirements = [
+    stored.classificationRequirements,
+    stored.systemPrompt,
+  ].find(
+    (value): value is string =>
+      typeof value === "string" && Boolean(value.trim()),
+  );
+  const knowledge =
+    typeof stored.knowledge === "string" ? stored.knowledge : undefined;
   return {
     ...(activeProvider ? { activeProvider } : {}),
     providers,
-    ...(systemPrompt ? { systemPrompt } : {}),
+    ...(classificationRequirements ? { classificationRequirements } : {}),
+    ...(knowledge === undefined ? {} : { knowledge }),
   };
 }
 
@@ -80,25 +88,30 @@ export async function saveProvider(
   storage: StorageArea,
   provider: ProviderId,
   settings: ProviderSettings,
-  systemPrompt?: string,
+  prompt?: { classificationRequirements: string; knowledge: string },
 ): Promise<ArkSettings> {
   const apiKey = settings.apiKey.trim();
   const model = settings.model.trim();
   const baseUrl = settings.baseUrl?.trim();
   const inputTokenLimit = settings.inputTokenLimit;
-  const prompt = systemPrompt?.trim();
   if (
     !apiKey ||
     !model ||
     (provider === "custom" && !baseUrl) ||
     (inputTokenLimit !== undefined &&
       (!Number.isInteger(inputTokenLimit) || inputTokenLimit <= 0)) ||
-    (systemPrompt !== undefined && !prompt)
+    (prompt !== undefined &&
+      (typeof prompt.classificationRequirements !== "string" ||
+        !prompt.classificationRequirements.trim() ||
+        typeof prompt.knowledge !== "string"))
   ) {
     throw new TypeError("Incomplete provider settings");
   }
 
   const current = await loadSettings(storage);
+  const classificationRequirements =
+    prompt?.classificationRequirements ?? current.classificationRequirements;
+  const knowledge = prompt?.knowledge ?? current.knowledge;
   const next: ArkSettings = {
     activeProvider: provider,
     providers: {
@@ -110,11 +123,8 @@ export async function saveProvider(
         ...(inputTokenLimit === undefined ? {} : { inputTokenLimit }),
       },
     },
-    ...(prompt
-      ? { systemPrompt: prompt }
-      : current.systemPrompt
-        ? { systemPrompt: current.systemPrompt }
-        : {}),
+    ...(classificationRequirements ? { classificationRequirements } : {}),
+    ...(knowledge === undefined ? {} : { knowledge }),
   };
   await storage.set({ [STORAGE_KEY]: next });
   return next;

@@ -185,6 +185,11 @@ body {
   background: var(--ark-accent-hover);
 }
 
+.stop-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .rename-control {
   margin-top: 10px;
   border: 1px solid var(--ark-border);

@@ -4,6 +4,7 @@ import { ArkError } from "../src/errors";
 import type { BrowserGroup, BrowserTab, TabsPort } from "../src/grouping";
 import type { PermissionsPort } from "../src/permissions";
 import type { Provider } from "../src/providers/types";
+import { getProvider } from "../src/providers";
 import type { ArkSettings, StorageArea } from "../src/settings";
 
 function storageWith(settings?: ArkSettings): StorageArea {
@@ -157,7 +158,10 @@ describe("organiseTabs", () => {
     const subject = deps({
       storage: storageWith({
         ...configuredSettings(),
-        systemPrompt: "My complete prompt",
+        ...{
+          classificationRequirements: "My classification rules",
+          knowledge: "foo.internal is our project tracker.",
+        },
       }),
       tabs: port,
       providerFor: () =>
@@ -176,8 +180,38 @@ describe("organiseTabs", () => {
       ungroupedCount: 1,
     });
     expect(receivedIds).toEqual(["t0", "t1"]);
-    expect(receivedPrompt).toBe("My complete prompt");
+    expect(receivedPrompt).toContain("My classification rules");
+    expect(receivedPrompt).toContain("foo.internal is our project tracker.");
+    expect(receivedPrompt).toContain("Include every tab ID exactly once");
+    expect(receivedPrompt).toContain('"ungroupedTabIds"');
+    expect(receivedPrompt).not.toContain("chromeTabId");
     expect(port.groupCalls).toEqual([[10]]);
+  });
+
+  it("keeps all Knowledge in every batch and includes it in input limits", async () => {
+    const knowledge = `foo.internal is a project tracker. ${"K".repeat(3000)}`;
+    const port = tabsPort();
+    let calls = 0;
+    const subject = deps({
+      storage: storageWith({
+        ...configuredSettings(),
+        providers: {
+          openai: { apiKey: "key", model: "model", inputTokenLimit: 2000 },
+        },
+        ...{ classificationRequirements: "Group by subject", knowledge },
+      }),
+      tabs: port,
+      providerFor: () =>
+        provider(async () => {
+          calls += 1;
+          return { groups: [], ungroupedTabIds: ["t0", "t1"] };
+        }),
+    });
+    await expect(organiseTabs(subject)).rejects.toMatchObject({
+      code: "input_too_long",
+    });
+    expect(calls).toBe(0);
+    expect(port.groupCalls).toEqual([]);
   });
 
   it("forwards provider reasoning without changing the result", async () => {
@@ -208,12 +242,12 @@ describe("organiseTabs", () => {
           openai: {
             apiKey: "key",
             model: "model",
-            inputTokenLimit: 500,
+            inputTokenLimit: 3000,
           } as ArkSettings["providers"]["openai"],
         },
-        systemPrompt: "Sort these tabs.",
+        ...{ classificationRequirements: "Sort these tabs." },
       }),
-      tabs: tabsPort(4, (index) => `${index}-${"x".repeat(300)}`),
+      tabs: tabsPort(4, (index) => `${index}-${"x".repeat(1400)}`),
       providerFor: () =>
         provider(async (_settings, tabs) => {
           received.push(tabs.map(({ id }) => id));
@@ -256,6 +290,36 @@ describe("organiseTabs", () => {
       ungroupedCount: 0,
     });
     expect(received).toEqual([["t0", "t1"], ["t0"], ["t1"]]);
+  });
+
+  it("retains Knowledge in every batch but separates runtime instructions from background", async () => {
+    const prompts: string[] = [];
+    const knowledge = "foo.internal hosts project documents.";
+    const subject = deps({
+      storage: storageWith({
+        ...configuredSettings(),
+        classificationRequirements: "Group by project",
+        knowledge,
+      }),
+      providerFor: () =>
+        provider(async (_settings, tabs, _locale, _signal, prompt) => {
+          if (tabs.length > 1) throw new ArkError("input_too_long");
+          prompts.push(prompt ?? "");
+          return {
+            groups: [{ name: "Docs", tabIds: tabs.map(({ id }) => id) }],
+            ungroupedTabIds: [],
+          };
+        }),
+    });
+    await expect(organiseTabs(subject)).resolves.toEqual({
+      groupCount: 1,
+      ungroupedCount: 0,
+    });
+    expect(prompts).toHaveLength(2);
+    for (const prompt of prompts) expect(prompt).toContain(knowledge);
+    expect(prompts[1]).toContain(
+      `${knowledge}\n\n## Batch context (application constraints)\nEarlier batches used`,
+    );
   });
 
   it("balances automatic splits by input size rather than tab count", async () => {
@@ -321,13 +385,13 @@ describe("organiseTabs", () => {
 
   it("turns an expired request into a timeout without grouping", async () => {
     const port = tabsPort();
-    const slowProvider = provider(async (_settings, _tabs, _locale, signal) => {
+    const slowProvider = getProvider("openai", async (_url, init) => {
       await new Promise<void>((_resolve, reject) => {
-        signal.addEventListener("abort", () =>
+        init!.signal!.addEventListener("abort", () =>
           reject(new DOMException("Aborted", "AbortError")),
         );
       });
-      return { groups: [], ungroupedTabIds: [] };
+      return new Response();
     });
 
     await expect(
@@ -341,8 +405,9 @@ describe("organiseTabs", () => {
     expect(port.groupCalls).toEqual([]);
   });
 
-  it("uses a 60 second timeout by default", async () => {
+  it("delegates idle deadlines to providers without a total batch cap", async () => {
     vi.useFakeTimers();
+    const controller = new AbortController();
     let signal: AbortSignal | undefined;
     const slowProvider = provider(
       async (_settings, _tabs, _locale, receivedSignal) => {
@@ -358,18 +423,123 @@ describe("organiseTabs", () => {
 
     try {
       const subject = deps({ providerFor: () => slowProvider });
+      subject.signal = controller.signal;
       delete subject.timeoutMs;
       const result = expect(organiseTabs(subject)).rejects.toMatchObject({
-        code: "timeout",
+        code: "cancelled",
       });
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(360_000);
       expect(signal?.aborted).toBe(false);
-      await vi.advanceTimersByTimeAsync(30_000);
+      controller.abort();
       await result;
     } finally {
       vi.useRealTimers();
     }
   });
+
+  it("does not commit if cancellation arrives with the final provider result", async () => {
+    const controller = new AbortController();
+    const port = tabsPort();
+    const subject = deps({
+      tabs: port,
+      providerFor: () =>
+        provider(async () => {
+          controller.abort();
+          return {
+            groups: [{ name: "Docs", tabIds: ["t0", "t1"] }],
+            ungroupedTabIds: [],
+          };
+        }),
+    });
+    subject.signal = controller.signal;
+    await expect(organiseTabs(subject)).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(port.groupCalls).toEqual([]);
+  });
+
+  it("allows recovery to finish beyond the initial call deadline before grouping", async () => {
+    vi.useFakeTimers();
+    const port = tabsPort();
+    const responses = [
+      '{"groups":[{"name":"Docs","tabIds":["t0"]}],"ungroupedTabIds":[]}',
+      '{"candidate":1,"edits":[{"search":"\\"ungroupedTabIds\\":[]","replacement":"\\"ungroupedTabIds\\":[\\"t1\\"]"}]}',
+    ];
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 45_000);
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true },
+        );
+      });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() } }],
+        }),
+      );
+    };
+    try {
+      const result = expect(
+        organiseTabs(
+          deps({
+            tabs: port,
+            timeoutMs: 60_000,
+            providerFor: (id) => getProvider(id, fetchImpl),
+          }),
+        ),
+      ).resolves.toEqual({ groupCount: 1, ungroupedCount: 1 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(port.groupCalls).toEqual([]);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await result;
+      expect(port.groupCalls).toEqual([[10]]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["invalid patch", "context limit"])(
+    "does not change tabs or regenerate after recovery fails: %s",
+    async (failure) => {
+      const port = tabsPort();
+      let calls = 0;
+      const fetchImpl: typeof fetch = async () => {
+        calls += 1;
+        if (calls > 1 && failure === "context limit")
+          return new Response(
+            JSON.stringify({ error: { code: "context_length_exceeded" } }),
+            { status: 400 },
+          );
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content:
+                    calls === 1
+                      ? '{"groups":[],"ungroupedTabIds":["t0"]}'
+                      : "invalid patch",
+                },
+              },
+            ],
+          }),
+        );
+      };
+      await expect(
+        organiseTabs(
+          deps({ tabs: port, providerFor: (id) => getProvider(id, fetchImpl) }),
+        ),
+      ).rejects.toMatchObject({ code: "invalid_response" });
+      expect(port.groupCalls).toEqual([]);
+      expect(calls).toBe(failure === "context limit" ? 2 : 3);
+    },
+  );
 
   it("preserves provider error codes without grouping", async () => {
     const port = tabsPort();

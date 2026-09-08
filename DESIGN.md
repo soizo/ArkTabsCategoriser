@@ -38,9 +38,9 @@ The popup is 360px wide. Reading order is fixed:
 2. Eligible-tab count
 3. Native selector for configured provider/model combinations plus a secondary
    connectivity test
-4. One full-width organising action
+4. One full-width organising action, followed by a secondary Stop button while active
 5. Compact multi-select renaming for existing groups
-6. Conditional transient output for OpenRouter reasoning or safe diagnostics
+6. Conditional transient output for OpenRouter reasoning or task diagnostics
 7. Status or recovery guidance
 8. Data-sharing disclosure
 
@@ -50,15 +50,34 @@ Existing groups can be renamed from one compact disclosure below the primary
 action. Selected rows enable their own name fields, and the bounded list scrolls
 rather than displacing the primary task.
 
-The model controls share one quiet inset region. The output region appears
-after displayable reasoning or an error, scrolls internally, and is never
-stored. Successful runs clear it. Failed runs retain any reasoning already
+The model controls share one quiet inset region, including model-test feedback
+and its diagnostic output. Organisation output belongs below the task controls.
+Stop stays visible but disabled during cancellation or the final Chrome commit;
+nearby text explains why. Reopened popups show the running task's actual model,
+original-window count, and original elapsed time rather than starting again.
+
+The output region appears after displayable reasoning or an error and scrolls
+internally. Recent reasoning is bounded in worker memory for reconnection and
+never written to storage. Only a small task summary uses session storage. Successful runs clear it. Failed runs retain any reasoning already
 shown and append safe diagnostics without request bodies, provider responses,
 keys, tab data, or stack traces.
 
 ## Options page
 
-Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, editable system prompt with a restore-default action, privacy note, status, safe diagnostic output, and save action form one continuous task. A collapsed advanced section optionally overrides the model input token limit; blank keeps automatic retry-and-split behavior.
+Use one centred settings sheet rather than a dashboard. Provider selection, API key, optional custom base URL, editable model combobox with load and test actions, prompt settings, privacy note, status, safe diagnostic output, and save action form one continuous task. A collapsed advanced section optionally overrides the model input token limit; blank keeps automatic retry-and-split behavior.
+
+Model loading and testing have their own live status directly below the model
+buttons; related diagnostics appear there too. Save feedback stays at the footer.
+A provider switch invalidates pending model feedback, and asynchronous requests
+retain the provider/credentials captured when the action began.
+
+Prompt settings use three vertically stacked native textareas: editable
+Classification requirements with a restore-default action, optional Knowledge,
+and a read-only Final System Prompt with a copy action. Restore preserves
+Knowledge. The preview reflects unsaved edits and explains that runtime batches
+append group context. Copy feedback is adjacent to the preview, separate from
+save feedback; clipboard failures select the text and explain manual copying.
+Keep persistent labels and help text, following [GOV.UK textarea guidance](https://design-system.service.gov.uk/components/textarea/), and give copy/save actions distinct feedback following [Nielsen's visibility-of-system-status heuristic](https://www.nngroup.com/articles/ten-usability-heuristics/).
 
 At narrow widths, the model input, both model actions, and footer stack. All inputs, buttons, and provider options have a minimum 44px target. The page remains usable from 320px and at 200% zoom.
 

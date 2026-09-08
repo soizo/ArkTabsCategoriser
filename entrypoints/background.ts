@@ -43,9 +43,10 @@ function nonEmptyTabIds(tabIds: number[]): [number, ...number[]] {
   return [first, ...rest];
 }
 
-const tabs: TabsPort = {
+function tabsForWindow(windowId?: number): TabsPort {
+  return {
   async queryCurrentWindow(): Promise<BrowserTab[]> {
-    const current = await browser.tabs.query({ currentWindow: true });
+    const current = await browser.tabs.query(windowId === undefined ? { currentWindow: true } : { windowId });
     return current.filter(hasId).map((tab) => ({
       id: tab.id,
       windowId: tab.windowId,
@@ -71,19 +72,26 @@ const tabs: TabsPort = {
   updateGroup: async (groupId, changes) => {
     await browser.tabGroups.update(groupId, changes);
   },
-};
+  };
+}
+const tabs = tabsForWindow();
 
 export default defineBackground(() => {
-  const organise = (onReasoning?: (text: string) => void) =>
-    organiseTabs({
+  const handleOrganisePort = createOrganisePortHandler({
+    organise: ({ windowId, ...run }) => organiseTabs({
+      ...run,
       storage,
       permissions,
-      tabs,
+      tabs: tabsForWindow(windowId),
       providerFor: getProvider,
       locale: browser.i18n.getUILanguage(),
-      ...(onReasoning ? { onReasoning } : {}),
-    });
-  const handleOrganisePort = createOrganisePortHandler({ organise });
+    }),
+    session: {
+      get: (key) => browser.storage.session.get(key),
+      set: (value) => browser.storage.session.set(value),
+    },
+    keepAlive: () => browser.runtime.getPlatformInfo(),
+  });
 
   const handleMessage = createMessageHandler({
     loadSettings: () => loadSettings(storage),

@@ -57,6 +57,8 @@ export async function* readSseData(
       if (done) break;
     }
   } finally {
+    // [DONE], parsing failure, and cancellation must also close the HTTP body.
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }

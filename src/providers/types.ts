@@ -24,6 +24,7 @@ export type Provider = {
     signal: AbortSignal,
     systemPrompt?: string,
     onReasoning?: (text: string) => void,
+    timeoutMs?: number,
   ): Promise<Categorisation>;
 };
 
@@ -100,6 +101,7 @@ export async function requestResponse(
   url: string,
   init: RequestInit,
   signal: AbortSignal,
+  onActivity?: () => void,
 ): Promise<Response> {
   let response: Response;
   try {
@@ -121,6 +123,28 @@ export async function requestResponse(
       reason: "request_failed",
       ...(requestOrigin ? { origin: requestOrigin } : {}),
     });
+  }
+
+  if (onActivity) {
+    onActivity();
+    if (response.body) {
+      const url = response.url;
+      const body = response.body.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            if (chunk.byteLength) onActivity();
+            controller.enqueue(chunk);
+          },
+        }),
+        { signal },
+      );
+      response = new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+      Object.defineProperty(response, "url", { value: url });
+    }
   }
 
   if (!response.ok) {
@@ -147,8 +171,9 @@ export async function requestJson(
   url: string,
   init: RequestInit,
   signal: AbortSignal,
+  onActivity?: () => void,
 ): Promise<unknown> {
-  const response = await requestResponse(fetchImpl, url, init, signal);
+  const response = await requestResponse(fetchImpl, url, init, signal, onActivity);
   try {
     return await response.json();
   } catch {

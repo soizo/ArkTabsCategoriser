@@ -28,6 +28,8 @@ export type PopupMessageKey =
     | "modelForbidden"
     | "rateLimited"
     | "requestTimeout"
+    | "organiseCancelled"
+    | "organiseInterrupted"
     | "invalidProviderResponse"
     | "inputTooLong"
     | "tabsChanged"
@@ -51,6 +53,8 @@ const ERROR_KEYS: Record<ArkErrorCode, PopupMessageKey> = {
     forbidden: "modelForbidden",
     rate_limited: "rateLimited",
     timeout: "requestTimeout",
+    cancelled: "organiseCancelled",
+    interrupted: "organiseInterrupted",
     network: "networkError",
     invalid_response: "invalidProviderResponse",
     input_too_long: "inputTooLong",

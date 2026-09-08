@@ -1,7 +1,5 @@
-import {
-  buildCategorisationPrompt,
-  parseCategorisation,
-} from "../categorisation";
+import { buildCategorisationPrompt } from "../categorisation";
+import { categoriseWithRecovery } from "../categorisation-recovery";
 import type { TabInput } from "../domain";
 import { ArkError } from "../errors";
 import type { ProviderSettings } from "../settings";
@@ -103,27 +101,35 @@ export function createAnthropicProvider(fetchImpl: Fetch): Provider {
       locale,
       signal,
       systemPrompt,
+      _onReasoning,
+      timeoutMs,
     ) {
       const prompt = buildCategorisationPrompt(tabs, locale, systemPrompt);
-      const value = await requestJson(
-        fetchImpl,
-        `${BASE_URL}/messages`,
-        {
-          method: "POST",
-          headers: headers(settings),
-          body: JSON.stringify({
-            model: settings.model,
-            max_tokens: 2048,
-            temperature: 0,
-            system: prompt.system,
-            messages: [{ role: "user", content: prompt.user }],
-          }),
-        },
-        signal,
-      );
-      return parseCategorisation(
-        messageText(value),
+      return categoriseWithRecovery(
+        prompt,
         tabs.map(({ id }) => id),
+        async (currentPrompt, requestSignal, _repair, onActivity) =>
+          messageText(
+            await requestJson(
+              fetchImpl,
+              `${BASE_URL}/messages`,
+              {
+                method: "POST",
+                headers: headers(settings),
+                body: JSON.stringify({
+                  model: settings.model,
+                  max_tokens: 2048,
+                  temperature: 0,
+                  system: currentPrompt.system,
+                  messages: [{ role: "user", content: currentPrompt.user }],
+                }),
+              },
+              requestSignal,
+              onActivity,
+            ),
+          ),
+        signal,
+        timeoutMs,
       );
     },
   };

@@ -192,7 +192,8 @@ function fakePort() {
     },
     posted,
     start() {
-      for (const listener of messageListeners) listener({ type: "start" });
+      for (const listener of messageListeners)
+        listener({ type: "start", windowId: 1 });
     },
     disconnect() {
       for (const listener of disconnectListeners) listener();
@@ -204,7 +205,7 @@ describe("organisation port", () => {
   it("posts reasoning and completion", async () => {
     const subject = fakePort();
     createOrganisePortHandler({
-      organise: async (onReasoning) => {
+      organise: async ({ onReasoning }) => {
         onReasoning("Thinking.");
         return { groupCount: 2, ungroupedCount: 1 };
       },
@@ -213,10 +214,18 @@ describe("organisation port", () => {
     subject.start();
 
     await vi.waitFor(() =>
-      expect(subject.posted).toEqual([
-        { type: "reasoning", text: "Thinking." },
-        { type: "complete", groupCount: 2, ungroupedCount: 1 },
-      ]),
+      expect(subject.posted).toEqual(
+        expect.arrayContaining([
+          { type: "reasoning", text: "Thinking." },
+          expect.objectContaining({
+            type: "state",
+            task: expect.objectContaining({
+              phase: "complete",
+              result: { groupCount: 2, ungroupedCount: 1 },
+            }),
+          }),
+        ]),
+      ),
     );
   });
 
@@ -235,17 +244,24 @@ describe("organisation port", () => {
     subject.start();
 
     await vi.waitFor(() =>
-      expect(subject.posted).toEqual([
-        {
-          type: "error",
-          errorCode: "forbidden",
-          diagnostic: {
-            stage: "response",
-            reason: "http_error",
-            status: 403,
-          },
-        },
-      ]),
+      expect(subject.posted).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "state",
+            task: expect.objectContaining({
+              phase: "error",
+              error: {
+                errorCode: "forbidden",
+                diagnostic: {
+                  stage: "response",
+                  reason: "http_error",
+                  status: 403,
+                },
+              },
+            }),
+          }),
+        ]),
+      ),
     );
   });
 
@@ -267,6 +283,7 @@ describe("organisation port", () => {
 
   it("continues safely but stops posting after disconnect", async () => {
     const subject = fakePort();
+    let started = false;
     let emit = (_text: string): void => {};
     let finish = (_value: {
       groupCount: number;
@@ -279,13 +296,16 @@ describe("organisation port", () => {
       finish = resolve;
     });
     createOrganisePortHandler({
-      organise: async (onReasoning) => {
+      organise: async ({ onReasoning }) => {
+        started = true;
         emit = onReasoning;
         return completed;
       },
     })(subject.port);
 
     subject.start();
+    await vi.waitFor(() => expect(started).toBe(true));
+    subject.posted.length = 0;
     subject.disconnect();
     emit("hidden");
     finish({ groupCount: 1, ungroupedCount: 0 });

@@ -194,6 +194,7 @@ h1 {
 }
 
 .text-button {
+  min-width: 44px;
   min-height: 44px;
   padding: 8px 0;
   border: 0;
@@ -227,6 +228,10 @@ h1 {
   margin: 7px 0 0;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.prompt-copy-status {
+  min-height: 1.45em;
 }
 
 .primary-button,

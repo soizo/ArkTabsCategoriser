@@ -1,5 +1,8 @@
 import "./style.css";
-import { defaultSystemPrompt } from "../../src/categorisation";
+import {
+  composeSystemPrompt,
+  defaultClassificationRequirements,
+} from "../../src/categorisation";
 import {
   ArkError,
   errorPayload,
@@ -50,9 +53,18 @@ const inputTokenLimitInput = required<HTMLInputElement>("#input-token-limit");
 const loadModelsButton = required<HTMLButtonElement>("#load-models");
 const testModelButton = required<HTMLButtonElement>("#test-model");
 const saveButton = required<HTMLButtonElement>("#save-settings");
+const requirementsInput = required<HTMLTextAreaElement>(
+  "#classification-requirements",
+);
+const knowledgeInput = required<HTMLTextAreaElement>("#knowledge");
 const systemPromptInput = required<HTMLTextAreaElement>("#system-prompt");
 const resetPromptButton = required<HTMLButtonElement>("#reset-prompt");
+const copyPromptButton = required<HTMLButtonElement>("#copy-prompt");
+const copyStatus = required<HTMLElement>("#prompt-copy-status");
 const status = required<HTMLElement>("#settings-status");
+const modelStatus = required<HTMLElement>("#model-status");
+const modelFeedback = required<HTMLElement>("#model-feedback");
+let modelRequestVersion = 0;
 const outputPanel = required<HTMLElement>("#settings-output");
 const outputContent = required<HTMLElement>("#settings-output-content");
 const providerInputs = [
@@ -76,7 +88,13 @@ function clearOutput(): void {
   outputPanel.hidden = true;
 }
 
-function showOutput(payload: ArkErrorPayload, fallback: ArkDiagnostic): void {
+function showOutput(
+  payload: ArkErrorPayload,
+  fallback: ArkDiagnostic,
+  model = false,
+): void {
+  if (model) modelFeedback.append(outputPanel);
+  else required<HTMLElement>(".form-footer").before(outputPanel);
   outputContent.textContent = formatDiagnostic(
     payload.diagnostic ?? fallback,
     (field) => msg(diagnosticLabels[field]),
@@ -88,17 +106,41 @@ function showFailure(
   error: unknown,
   fallbackCode: ArkErrorCode = "network",
   fallback: ArkDiagnostic = { stage: "request", reason: "request_failed" },
+  model = false,
 ): void {
-  showOutput(errorPayload(error, fallbackCode, fallback), fallback);
+  showOutput(errorPayload(error, fallbackCode, fallback), fallback, model);
 }
 
 function setStatus(
   key: MessageKey | "",
   kind: "neutral" | "success" | "error" = "neutral",
   substitutions?: string | string[],
+  target = status,
 ): void {
-  status.textContent = key ? msg(key, substitutions) : "";
-  status.dataset.kind = kind;
+  target.textContent = key ? msg(key, substitutions) : "";
+  target.dataset.kind = kind;
+}
+
+function setModelStatus(
+  key: MessageKey | "",
+  kind: "neutral" | "success" | "error" = "neutral",
+  substitutions?: string | string[],
+): void {
+  setStatus(key, kind, substitutions, modelStatus);
+}
+
+function modelRequestCurrent(
+  version: number,
+  settings: ProviderSettings,
+  test = false,
+): boolean {
+  const current = readDraft();
+  return (
+    version === modelRequestVersion &&
+    current.apiKey === settings.apiKey &&
+    current.baseUrl === settings.baseUrl &&
+    (!test || current.model === settings.model)
+  );
 }
 
 function readDraft(): ProviderSettings {
@@ -120,6 +162,10 @@ function captureDraft(): void {
 }
 
 function renderProvider(): void {
+  modelRequestVersion += 1;
+  loadModelsButton.disabled = false;
+  testModelButton.disabled = false;
+  setModelStatus("");
   const draft = drafts[selected];
   apiKeyInput.value = draft?.apiKey ?? "";
   modelInput.value = draft?.model ?? "";
@@ -180,22 +226,73 @@ for (const input of providerInputs) {
 
 modelPicker.addEventListener("change", () => {
   if (modelPicker.value) modelInput.value = modelPicker.value;
+  setModelStatus("");
+  clearOutput();
 });
 
+for (const input of [apiKeyInput, baseUrlInput, modelInput]) {
+  input.addEventListener("input", () => {
+    setModelStatus("");
+    clearOutput();
+  });
+}
+
+function renderPrompt(): void {
+  requirementsInput.setCustomValidity(
+    requirementsInput.value.trim()
+      ? ""
+      : msg("classificationRequirementsRequired"),
+  );
+  systemPromptInput.value = composeSystemPrompt(
+    browser.i18n.getUILanguage(),
+    requirementsInput.value,
+    knowledgeInput.value,
+  );
+  copyStatus.textContent = "";
+}
+
+for (const input of [requirementsInput, knowledgeInput]) {
+  input.addEventListener("input", () => {
+    renderPrompt();
+    setStatus("");
+  });
+}
+
 resetPromptButton.addEventListener("click", () => {
-  systemPromptInput.value = defaultSystemPrompt(browser.i18n.getUILanguage());
+  requirementsInput.value = defaultClassificationRequirements(
+    browser.i18n.getUILanguage(),
+  );
+  renderPrompt();
   setStatus("");
   clearOutput();
 });
 
+copyPromptButton.addEventListener("click", async () => {
+  const text = systemPromptInput.value;
+  copyPromptButton.disabled = true;
+  try {
+    await navigator.clipboard.writeText(text);
+    if (systemPromptInput.value === text)
+      copyStatus.textContent = msg("promptCopied");
+  } catch {
+    systemPromptInput.focus();
+    systemPromptInput.select();
+    copyStatus.textContent = msg("promptCopyFailed");
+  } finally {
+    copyPromptButton.disabled = false;
+  }
+});
+
 loadModelsButton.addEventListener("click", async () => {
   clearOutput();
+  const version = ++modelRequestVersion;
+  const provider = selected;
   const providerSettings = readDraft();
   if (
     !providerSettings.apiKey ||
     (selected === "custom" && !providerSettings.baseUrl)
   ) {
-    setStatus("invalidSettings", "error");
+    setModelStatus("invalidSettings", "error");
     showOutput(
       {
         errorCode: "not_configured",
@@ -206,17 +303,21 @@ loadModelsButton.addEventListener("click", async () => {
         },
       },
       { stage: "configuration", reason: "invalid_configuration" },
+      true,
     );
     return;
   }
 
   loadModelsButton.disabled = true;
-  setStatus("loadingModels");
+  testModelButton.disabled = true;
+  setModelStatus("loadingModels");
   try {
-    await requestProviderPermission(permissions, selected, providerSettings);
+    await requestProviderPermission(permissions, provider, providerSettings);
+    if (!modelRequestCurrent(version, providerSettings)) return;
     const models = await runWithTimeout((signal) => {
-      return getProvider(selected).listModels(providerSettings, signal);
+      return getProvider(provider).listModels(providerSettings, signal);
     });
+    if (!modelRequestCurrent(version, providerSettings)) return;
     const picker = modelPickerState(models, modelInput.value.trim());
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -233,25 +334,36 @@ loadModelsButton.addEventListener("click", async () => {
     modelPicker.value = picker.selected;
     modelPicker.hidden = picker.hidden;
     modelPickerLabel.hidden = picker.hidden;
-    drafts[selected] = providerSettings;
-    setStatus("modelsLoaded", "success", String(models.length));
+    drafts[provider] = readDraft();
+    setModelStatus("modelsLoaded", "success", String(models.length));
   } catch (error) {
-    setStatus(errorKey(error), "error");
-    showFailure(error);
+    if (!modelRequestCurrent(version, providerSettings)) return;
+    setModelStatus(errorKey(error), "error");
+    showFailure(
+      error,
+      "network",
+      { stage: "request", reason: "request_failed" },
+      true,
+    );
   } finally {
-    loadModelsButton.disabled = false;
+    if (version === modelRequestVersion) {
+      loadModelsButton.disabled = false;
+      testModelButton.disabled = false;
+    }
   }
 });
 
 testModelButton.addEventListener("click", async () => {
   clearOutput();
+  const version = ++modelRequestVersion;
+  const provider = selected;
   const providerSettings = readDraft();
   if (
     !providerSettings.apiKey ||
     !providerSettings.model ||
     (selected === "custom" && !providerSettings.baseUrl)
   ) {
-    setStatus("invalidSettings", "error");
+    setModelStatus("invalidSettings", "error");
     showOutput(
       {
         errorCode: "not_configured",
@@ -262,25 +374,36 @@ testModelButton.addEventListener("click", async () => {
         },
       },
       { stage: "configuration", reason: "invalid_configuration" },
+      true,
     );
     return;
   }
 
   testModelButton.disabled = true;
   loadModelsButton.disabled = true;
-  setStatus("testingModel");
+  setModelStatus("testingModel");
   try {
-    await requestProviderPermission(permissions, selected, providerSettings);
+    await requestProviderPermission(permissions, provider, providerSettings);
+    if (!modelRequestCurrent(version, providerSettings, true)) return;
     await runWithTimeout((signal) =>
-      getProvider(selected).testConnection(providerSettings, signal),
+      getProvider(provider).testConnection(providerSettings, signal),
     );
-    setStatus("modelTestSucceeded", "success");
+    if (modelRequestCurrent(version, providerSettings, true))
+      setModelStatus("modelTestSucceeded", "success");
   } catch (error) {
-    setStatus(errorKey(error), "error");
-    showFailure(error);
+    if (!modelRequestCurrent(version, providerSettings, true)) return;
+    setModelStatus(errorKey(error), "error");
+    showFailure(
+      error,
+      "network",
+      { stage: "request", reason: "request_failed" },
+      true,
+    );
   } finally {
-    testModelButton.disabled = false;
-    loadModelsButton.disabled = false;
+    if (version === modelRequestVersion) {
+      testModelButton.disabled = false;
+      loadModelsButton.disabled = false;
+    }
   }
 });
 
@@ -290,14 +413,19 @@ form.addEventListener("submit", async (event) => {
   if (!form.reportValidity()) return;
 
   const providerSettings = readDraft();
+  const provider = selected;
+  const prompt = {
+    classificationRequirements: requirementsInput.value,
+    knowledge: knowledgeInput.value,
+  };
   saveButton.disabled = true;
   try {
-    await requestProviderPermission(permissions, selected, providerSettings);
+    await requestProviderPermission(permissions, provider, providerSettings);
     const saved = await saveProvider(
       storage,
-      selected,
+      provider,
       providerSettings,
-      systemPromptInput.value,
+      prompt,
     );
     drafts = { ...saved.providers };
     setStatus("settingsSaved", "success");
@@ -320,6 +448,9 @@ localiseDocument();
 const stored = await loadSettings(storage);
 drafts = { ...stored.providers };
 selected = stored.activeProvider ?? "openai";
-systemPromptInput.value =
-  stored.systemPrompt ?? defaultSystemPrompt(browser.i18n.getUILanguage());
+requirementsInput.value =
+  stored.classificationRequirements ??
+  defaultClassificationRequirements(browser.i18n.getUILanguage());
+knowledgeInput.value = stored.knowledge ?? "";
+renderPrompt();
 renderProvider();

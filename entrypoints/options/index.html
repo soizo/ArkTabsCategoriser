@@ -109,6 +109,9 @@
               Test model
             </button>
           </div>
+          <div id="model-feedback">
+            <p id="model-status" class="status" role="status" aria-live="polite"></p>
+          </div>
           <label
             id="model-picker-label"
             class="model-picker-label"
@@ -155,8 +158,8 @@
 
         <div class="field">
           <div class="field-heading">
-            <label for="system-prompt" data-i18n="systemPrompt"
-              >System prompt</label
+            <label for="classification-requirements" data-i18n="classificationRequirements"
+              >Classification requirements</label
             >
             <button
               id="reset-prompt"
@@ -168,16 +171,49 @@
             </button>
           </div>
           <textarea
-            id="system-prompt"
-            name="systemPrompt"
-            rows="9"
+            id="classification-requirements"
+            name="classificationRequirements"
+            rows="6"
             required
             spellcheck="true"
+            aria-describedby="classification-requirements-help"
           ></textarea>
-          <p class="field-help" data-i18n="systemPromptHelp">
-            Ark sends this instruction with tab titles and URLs. Invalid output
-            is rejected before tabs change.
+          <p id="classification-requirements-help" class="field-help" data-i18n="classificationRequirementsHelp">
+            Edit how tabs are grouped and named. Ark always adds its JSON and tab-ID constraints. Restore default changes only these requirements.
           </p>
+        </div>
+
+        <div class="field">
+          <label for="knowledge" data-i18n="knowledge">Knowledge (optional)</label>
+          <textarea
+            id="knowledge"
+            name="knowledge"
+            rows="5"
+            spellcheck="true"
+            data-i18n-placeholder="knowledgePlaceholder"
+            aria-describedby="knowledge-help"
+          ></textarea>
+          <p id="knowledge-help" class="field-help" data-i18n="knowledgeHelp">
+            Explain unfamiliar domains, terms, or projects. Sent in full with each classification request. Classification requirements take precedence over this background.
+          </p>
+        </div>
+
+        <div class="field">
+          <div class="field-heading">
+            <label for="system-prompt" data-i18n="systemPrompt">Final System Prompt</label>
+            <button id="copy-prompt" class="text-button" type="button" data-i18n="copyPrompt">Copy</button>
+          </div>
+          <textarea
+            id="system-prompt"
+            rows="9"
+            readonly
+            spellcheck="false"
+            aria-describedby="system-prompt-help prompt-copy-status"
+          ></textarea>
+          <p id="system-prompt-help" class="field-help" data-i18n="systemPromptHelp">
+            Read-only preview of your current edits. Save to use them for all providers. Batches append existing group context at runtime.
+          </p>
+          <p id="prompt-copy-status" class="field-help prompt-copy-status" role="status" aria-live="polite"></p>
         </div>
 
         <div class="privacy-note">

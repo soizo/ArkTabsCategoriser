@@ -7,7 +7,11 @@ import {
 } from "../../src/errors";
 import type { ProviderId, TabGroupColor } from "../../src/domain";
 import { localiseDocument, msg, type MessageKey } from "../../src/i18n";
-import type { OrganisePortOutbound } from "../../src/messages";
+import {
+  REASONING_LIMIT,
+  type OrganisePortOutbound,
+  type OrganiseTask,
+} from "../../src/messages";
 import { popupView, type PopupState } from "../../src/popup-state";
 
 function required<T extends Element>(selector: string): T {
@@ -48,7 +52,10 @@ const renameFieldset = required<HTMLFieldSetElement>("#rename-fieldset");
 const renameList = required<HTMLElement>("#rename-list");
 const renameSubmit = required<HTMLButtonElement>("#rename-submit");
 const settingsButton = required<HTMLButtonElement>("#settings");
-const statusElement = required<HTMLElement>("#popup-status");
+const taskStatusElement = required<HTMLElement>("#popup-status");
+const modelStatusElement = required<HTMLElement>("#model-status");
+const stopButton = required<HTMLButtonElement>("#stop-organise");
+let statusElement = taskStatusElement;
 const reasoningPanel = required<HTMLElement>("#reasoning-panel");
 const reasoningHeading = required<HTMLElement>("#reasoning-heading");
 const reasoningPulse = required<HTMLElement>("#reasoning-pulse");
@@ -61,6 +68,26 @@ let groups: PopupStateResponse["groups"] = [];
 let active:
   | { providerId: ProviderId; provider: string; model: string }
   | undefined;
+let currentTask: OrganiseTask | null = null;
+let taskPort: ReturnType<typeof browser.runtime.connect> | undefined;
+let windowId: number | undefined;
+let eligibleCount = 0;
+let reconnects = 0;
+let taskConnected = false;
+
+function taskRunning(): boolean {
+  return (
+    !!currentTask &&
+    ["running", "applying", "stopping"].includes(currentTask.phase)
+  );
+}
+
+function outputContext(model = false): void {
+  statusElement = model ? modelStatusElement : taskStatusElement;
+  if (model) modelControl.append(reasoningPanel);
+  else taskStatusElement.before(reasoningPanel);
+}
+
 let reasoningStarted = 0;
 let reasoningTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -87,7 +114,7 @@ function clearReasoning(): void {
 
 function updateReasoningElapsed(): void {
   reasoningElapsed.textContent = `${(
-    (performance.now() - reasoningStarted) / 1000
+    (Date.now() - reasoningStarted) / 1000
   ).toFixed(1)} s`;
 }
 
@@ -179,12 +206,14 @@ function renderGroups(): void {
 function appendReasoning(text: string): void {
   if (!text) return;
   if (reasoningPanel.hidden) {
-    reasoningStarted = performance.now();
+    reasoningStarted = currentTask?.startedAt ?? Date.now();
     updateReasoningElapsed();
     reasoningTimer = setInterval(updateReasoningElapsed, 100);
     reasoningPanel.hidden = false;
   }
-  reasoningContent.textContent += text;
+  reasoningContent.textContent = (
+    (reasoningContent.textContent ?? "") + text
+  ).slice(-REASONING_LIMIT);
   reasoningContent.scrollTop = reasoningContent.scrollHeight;
 }
 
@@ -196,20 +225,22 @@ function render(next: PopupState): void {
   modelControl.hidden = modelElement.options.length === 0;
   modelElement.hidden = modelElement.options.length === 0;
   testModelButton.hidden = modelElement.options.length === 0;
-  modelElement.disabled = view.busy;
-  testModelButton.disabled = view.busy;
-  renameFieldset.disabled = view.busy;
+  modelElement.disabled = view.busy || !taskConnected;
+  testModelButton.disabled = view.busy || !taskConnected;
+  renameFieldset.disabled = view.busy || !taskConnected;
   syncRenameButton();
   modelElement.title = modelElement.selectedOptions[0]?.textContent ?? "";
   organiseLabel.textContent = msg(view.buttonKey as MessageKey);
-  organiseButton.disabled = view.buttonDisabled;
+  organiseButton.disabled = view.buttonDisabled || !taskConnected;
   organiseButton.setAttribute("aria-busy", String(view.busy));
   statusElement.textContent = view.statusKey
     ? msg(view.statusKey as MessageKey, view.statusSubstitution)
     : "";
   statusElement.dataset.kind =
     next.kind === "error"
-      ? "error"
+      ? next.code === "cancelled"
+        ? "neutral"
+        : "error"
       : next.kind === "success"
         ? "success"
         : "neutral";
@@ -225,8 +256,11 @@ settingsButton.addEventListener("click", () => {
 });
 
 modelElement.addEventListener("change", async () => {
+  if (taskRunning()) return;
+  outputContext(true);
   clearReasoning();
   const previousProvider = active?.providerId;
+  const taskId = currentTask?.id;
   const providerId = modelElement.value as ProviderId;
   const selected = configuredProviders.find(
     ({ provider }) => provider === providerId,
@@ -234,6 +268,8 @@ modelElement.addEventListener("change", async () => {
   if (!selected) return;
 
   modelElement.disabled = true;
+  testModelButton.disabled = true;
+  organiseButton.disabled = true;
   try {
     await browser.runtime.sendMessage({
       type: "activateProvider",
@@ -244,6 +280,7 @@ modelElement.addEventListener("change", async () => {
       provider: providerNames[providerId],
       model: selected.model,
     };
+    if (currentTask?.id !== taskId || taskRunning()) return;
     render({
       kind: "ready",
       count: state.count,
@@ -251,6 +288,7 @@ modelElement.addEventListener("change", async () => {
       model: active.model,
     });
   } catch {
+    if (currentTask?.id !== taskId || taskRunning()) return;
     if (previousProvider) modelElement.value = previousProvider;
     render({ kind: "error", count: state.count, code: "network" });
     appendError(runtimeFailure());
@@ -258,7 +296,9 @@ modelElement.addEventListener("change", async () => {
 });
 
 testModelButton.addEventListener("click", async () => {
-  if (!active) return;
+  if (!active || taskRunning()) return;
+  const taskId = currentTask?.id;
+  outputContext(true);
   clearReasoning();
   render({
     kind: "testing",
@@ -270,6 +310,7 @@ testModelButton.addEventListener("click", async () => {
     const response = (await browser.runtime.sendMessage({
       type: "testModel",
     })) as SimpleResponse;
+    if (currentTask?.id !== taskId || taskRunning()) return;
     if (!response.ok) {
       render({ kind: "error", count: state.count, code: response.errorCode });
       appendError(response);
@@ -284,12 +325,15 @@ testModelButton.addEventListener("click", async () => {
     statusElement.textContent = msg("modelTestSucceeded");
     statusElement.dataset.kind = "success";
   } catch {
+    if (currentTask?.id !== taskId || taskRunning()) return;
     render({ kind: "error", count: state.count, code: "network" });
     appendError(runtimeFailure());
   }
 });
 
 renameSubmit.addEventListener("click", async () => {
+  if (taskRunning()) return;
+  outputContext();
   const renames = [
     ...renameList.querySelectorAll<HTMLInputElement>(
       "input[type=checkbox]:checked",
@@ -350,49 +394,184 @@ renameSubmit.addEventListener("click", async () => {
   statusElement.dataset.kind = "success";
 });
 
+function renderTask(
+  message: Extract<OrganisePortOutbound, { type: "state" }>,
+): void {
+  const previousId = currentTask?.id;
+  currentTask = message.task;
+  if (!currentTask) {
+    stopButton.hidden = true;
+    required<HTMLElement>(".tab-summary-copy span").textContent =
+      msg("eligibleTabScope");
+    if (previousId) {
+      outputContext();
+      clearReasoning();
+    }
+    render(
+      previousId
+        ? { kind: "error", count: eligibleCount, code: "interrupted" }
+        : state,
+    );
+    return;
+  }
+  const task = currentTask;
+  outputContext();
+  clearReasoning();
+  stopButton.hidden = !taskRunning();
+  stopButton.disabled = task.phase !== "running" || !taskPort;
+  stopButton.textContent = msg(
+    task.phase === "stopping" ? "stoppingTabs" : "stopOrganising",
+  );
+  required<HTMLElement>(".tab-summary-copy span").textContent = msg(
+    taskRunning() ? "taskWindowScope" : "eligibleTabScope",
+  );
+  const choices = [...configuredProviders];
+  if (taskRunning() && task.info) {
+    const index = choices.findIndex(
+      (item) => item.provider === task.info!.provider,
+    );
+    const choice = { provider: task.info.provider, model: task.info.model };
+    if (index < 0) choices.push(choice);
+    else choices[index] = choice;
+  }
+  modelElement.replaceChildren(
+    ...choices.map(({ provider, model }) => {
+      const option = document.createElement("option");
+      option.value = provider;
+      option.textContent = `${providerNames[provider]} · ${model}`;
+      return option;
+    }),
+  );
+  modelElement.value =
+    (taskRunning() ? task.info?.provider : active?.providerId) ??
+    active?.providerId ??
+    "";
+  if (taskRunning()) {
+    render({
+      kind: "working",
+      count: task.info?.count ?? eligibleCount,
+      provider: task.info
+        ? providerNames[task.info.provider]
+        : (active?.provider ?? ""),
+      model: task.info?.model ?? active?.model ?? "",
+    });
+    statusElement.textContent = msg(
+      task.phase === "applying"
+        ? "applyingGroups"
+        : task.phase === "stopping"
+          ? "stoppingTabs"
+          : "backgroundOrganising",
+    );
+    appendReasoning(message.reasoning);
+    if (task.phase !== "running") {
+      if (reasoningTimer) clearInterval(reasoningTimer);
+      reasoningTimer = undefined;
+      reasoningPulse.hidden = true;
+      reasoningHeading.textContent = msg("output");
+    }
+  } else if (task.phase === "complete" && task.result) {
+    render({ kind: "success", count: eligibleCount, ...task.result });
+    if (task.windowId !== windowId)
+      statusElement.prepend(msg("otherWindowResult"));
+    // Refresh rename controls after grouping, without overwriting the task result.
+    void browser.runtime
+      .sendMessage({ type: "popupState" })
+      .then((response: PopupStateResponse) => {
+        if (currentTask?.id !== task.id || taskRunning()) return;
+        groups = response.groups;
+        renderGroups();
+      })
+      .catch(() => {});
+  } else if (task.phase === "cancelled") {
+    render({ kind: "error", count: eligibleCount, code: "cancelled" });
+  } else {
+    const failure = task.error ?? runtimeFailure();
+    render({ kind: "error", count: eligibleCount, code: failure.errorCode });
+    appendReasoning(message.reasoning);
+    appendError(failure);
+  }
+  if (previousId !== task.id) modelStatusElement.textContent = "";
+}
+
+function disconnected(): void {
+  outputContext();
+  stopButton.disabled = true;
+  if (reasoningTimer) clearInterval(reasoningTimer);
+  reasoningTimer = undefined;
+  reasoningPulse.hidden = true;
+  statusElement.textContent = msg("taskConnectionLost");
+  statusElement.dataset.kind = "error";
+  organiseButton.disabled = false;
+  organiseButton.setAttribute("aria-busy", "false");
+  organiseLabel.textContent = msg("reconnectTask");
+}
+
+function connectTask(): void {
+  taskConnected = false;
+  organiseButton.disabled = true;
+  testModelButton.disabled = true;
+  modelElement.disabled = true;
+  try {
+    const port = browser.runtime.connect({ name: "organise" });
+    taskPort = port;
+    port.onMessage.addListener((message: OrganisePortOutbound) => {
+      if (taskPort !== port) return;
+      if (message.type === "reasoning") appendReasoning(message.text);
+      else {
+        taskConnected = true;
+        renderTask(message);
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      if (taskPort !== port) return;
+      taskPort = undefined;
+      taskConnected = false;
+      if (reconnects++ === 0) connectTask();
+      else disconnected();
+    });
+  } catch {
+    taskPort = undefined;
+    disconnected();
+  }
+}
+
+stopButton.addEventListener("click", () => {
+  if (!taskPort || currentTask?.phase !== "running") return;
+  stopButton.disabled = true;
+  try {
+    taskPort.postMessage({ type: "stop", id: currentTask.id });
+  } catch {
+    taskPort = undefined;
+    disconnected();
+  }
+});
+
 organiseButton.addEventListener("click", async () => {
+  if (!taskPort) {
+    reconnects = 0;
+    connectTask();
+    return;
+  }
+  if (!taskConnected || taskRunning()) return;
   if (state.kind === "unconfigured" || !active) {
     await openOptions();
     return;
   }
-
+  if (windowId === undefined) return;
+  outputContext();
+  clearReasoning();
   render({
     kind: "working",
-    count: state.count,
+    count: eligibleCount,
     provider: active.provider,
     model: active.model,
   });
-  clearReasoning();
-  const port = browser.runtime.connect({ name: "organise" });
-  let settled = false;
-
-  port.onMessage.addListener((message: OrganisePortOutbound) => {
-    if (message.type === "reasoning") {
-      appendReasoning(message.text);
-      return;
-    }
-    settled = true;
-    if (message.type === "complete") {
-      clearReasoning();
-      render({
-        kind: "success",
-        count: state.count,
-        groupCount: message.groupCount,
-        ungroupedCount: message.ungroupedCount,
-      });
-    } else {
-      render({ kind: "error", count: state.count, code: message.errorCode });
-      appendError(message);
-    }
-    port.disconnect();
-  });
-  port.onDisconnect.addListener(() => {
-    if (!settled) {
-      render({ kind: "error", count: state.count, code: "network" });
-      appendError(runtimeFailure());
-    }
-  });
-  port.postMessage({ type: "start" });
+  try {
+    taskPort.postMessage({ type: "start", windowId });
+  } catch {
+    taskPort = undefined;
+    disconnected();
+  }
 });
 
 localiseDocument();
@@ -401,9 +580,11 @@ modelElement.ariaLabel = msg("activeModel");
 render(state);
 
 try {
+  windowId = (await browser.windows.getCurrent()).id;
   const response = (await browser.runtime.sendMessage({
     type: "popupState",
   })) as PopupStateResponse;
+  eligibleCount = response.count;
   configuredProviders = response.configuredProviders;
   groups = response.groups;
   renderGroups();
@@ -431,6 +612,7 @@ try {
   } else {
     render({ kind: "unconfigured", count: response.count });
   }
+  connectTask();
 } catch {
   render({ kind: "error", count: 0, code: "network" });
   appendError(runtimeFailure());

@@ -19,6 +19,69 @@ describe("parseCategorisation", () => {
     });
   });
 
+  it.each([
+    ["JSON fence", `\`\`\`json\n${validResult}\n\`\`\``],
+    ["unlabelled fence", `\`\`\`\n${validResult}\n\`\`\``],
+    ["tilde fence", `~~~JSON\n${validResult}\n~~~`],
+    ["separator", `---\n${validResult}\n---`],
+    [
+      "prose and fence",
+      `Here is the answer:\n\`\`\`json\n${validResult}\n\`\`\`\nDone.`,
+    ],
+    ["prose and separator", `Answer:\n---\n${validResult}\n---\nDone.`],
+    ["bare prose", `Answer: ${validResult}\nDone.`],
+    ["irrelevant object", `Example: {"note":"ignore"}\n${validResult}`],
+    ["invalid candidate", `{"groups":[]}\n${validResult}`],
+    [
+      "truncated fenced candidate followed by valid answer",
+      `\`\`\`json\n{"groups":[]\n\`\`\`\n\`\`\`json\n${validResult}\n\`\`\``,
+    ],
+    ["unbalanced prose brace", `Notation { unfinished\n${validResult}`],
+    [
+      "repeated result",
+      `${validResult}\n${JSON.stringify(JSON.parse(validResult), null, 2)}`,
+    ],
+  ])("extracts %s without weakening validation", (_name, text) => {
+    expect(parseCategorisation(text, expectedIds)).toEqual({
+      groups: [{ name: "Work", tabIds: ["t0", "t1"] }],
+      ungroupedTabIds: ["t2"],
+    });
+  });
+
+  it("does not mistake escaped quotes, braces, or delimiters inside names for boundaries", () => {
+    const name = 'Read "quoted" \\ } { ``` ---';
+    const text = JSON.stringify({
+      groups: [{ name, tabIds: expectedIds }],
+      ungroupedTabIds: [],
+    });
+    expect(
+      parseCategorisation(`Answer:\n${text}\nDone.`, expectedIds).groups[0]
+        ?.name,
+    ).toBe(name);
+  });
+
+  it("rejects multiple different valid results instead of picking the first or last", () => {
+    const alternative = JSON.stringify({
+      groups: [],
+      ungroupedTabIds: expectedIds,
+    });
+    expect(() =>
+      parseCategorisation(`${validResult}\n${alternative}`, expectedIds),
+    ).toThrowError(
+      expect.objectContaining({
+        diagnostic: expect.objectContaining({
+          context: "Multiple different categorisations passed validation",
+        }),
+      }),
+    );
+  });
+
+  it("does not salvage a nested object from a complete JSON array", () => {
+    expect(() =>
+      parseCategorisation(`[${validResult}]`, expectedIds),
+    ).toThrowError(expect.objectContaining({ code: "invalid_response" }));
+  });
+
   it("allows every tab to remain ungrouped", () => {
     const text = JSON.stringify({ groups: [], ungroupedTabIds: expectedIds });
 
