@@ -45,51 +45,55 @@ function nonEmptyTabIds(tabIds: number[]): [number, ...number[]] {
 
 function tabsForWindow(windowId?: number): TabsPort {
   return {
-  async queryCurrentWindow(): Promise<BrowserTab[]> {
-    const current = await browser.tabs.query(windowId === undefined ? { currentWindow: true } : { windowId });
-    return current.filter(hasId).map((tab) => ({
-      id: tab.id,
-      windowId: tab.windowId,
-      ...(tab.title === undefined ? {} : { title: tab.title }),
-      ...(tab.url === undefined ? {} : { url: tab.url }),
-      pinned: tab.pinned,
-      groupId: tab.groupId,
-    }));
-  },
-  async queryGroups(windowId): Promise<BrowserGroup[]> {
-    const groups = await browser.tabGroups.query({ windowId });
-    return groups.map((group) => ({
-      id: group.id,
-      ...(group.title === undefined ? {} : { title: group.title }),
-      color: group.color,
-      collapsed: group.collapsed,
-    }));
-  },
-  group: (tabIds) => browser.tabs.group({
-    tabIds: nonEmptyTabIds(tabIds),
-    // Firefox otherwise creates the group in the currently focused window.
-    ...(windowId === undefined ? {} : { createProperties: { windowId } }),
-  }),
-  ungroup: async (tabIds) => {
-    await browser.tabs.ungroup(nonEmptyTabIds(tabIds));
-  },
-  updateGroup: async (groupId, changes) => {
-    await browser.tabGroups.update(groupId, changes);
-  },
+    async queryCurrentWindow(): Promise<BrowserTab[]> {
+      const current = await browser.tabs.query(
+        windowId === undefined ? { currentWindow: true } : { windowId },
+      );
+      return current.filter(hasId).map((tab) => ({
+        id: tab.id,
+        windowId: tab.windowId,
+        ...(tab.title === undefined ? {} : { title: tab.title }),
+        ...(tab.url === undefined ? {} : { url: tab.url }),
+        pinned: tab.pinned,
+        groupId: tab.groupId,
+      }));
+    },
+    async queryGroups(windowId): Promise<BrowserGroup[]> {
+      const groups = await browser.tabGroups.query({ windowId });
+      return groups.map((group) => ({
+        id: group.id,
+        ...(group.title === undefined ? {} : { title: group.title }),
+        color: group.color,
+        collapsed: group.collapsed,
+      }));
+    },
+    group: (tabIds) =>
+      browser.tabs.group({
+        tabIds: nonEmptyTabIds(tabIds),
+        // Firefox otherwise creates the group in the currently focused window.
+        ...(windowId === undefined ? {} : { createProperties: { windowId } }),
+      }),
+    ungroup: async (tabIds) => {
+      await browser.tabs.ungroup(nonEmptyTabIds(tabIds));
+    },
+    updateGroup: async (groupId, changes) => {
+      await browser.tabGroups.update(groupId, changes);
+    },
   };
 }
 const tabs = tabsForWindow();
 
 export default defineBackground(() => {
   const handleOrganisePort = createOrganisePortHandler({
-    organise: ({ windowId, ...run }) => organiseTabs({
-      ...run,
-      storage,
-      permissions,
-      tabs: tabsForWindow(windowId),
-      providerFor: getProvider,
-      locale: browser.i18n.getUILanguage(),
-    }),
+    organise: ({ windowId, ...run }) =>
+      organiseTabs({
+        ...run,
+        storage,
+        permissions,
+        tabs: tabsForWindow(windowId),
+        providerFor: getProvider,
+        locale: browser.i18n.getUILanguage(),
+      }),
     session: {
       get: (key) => browser.storage.session.get(key),
       set: (value) => browser.storage.session.set(value),

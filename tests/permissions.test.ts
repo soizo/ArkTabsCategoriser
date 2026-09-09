@@ -75,18 +75,23 @@ describe("provider permissions", () => {
     ["firefox", "https://[::1]/v1", "https://[::1]/*"],
     ["chrome", "http://localhost:11434/v1", "http://localhost:11434/*"],
     ["chrome", "https://llm.example:8443/v1", "https://llm.example:8443/*"],
-  ])("uses a supported %s permission pattern for %s", async (browser, baseUrl, pattern) => {
-    vi.stubEnv("BROWSER", browser);
-    const port = permissionsPort(true);
-    const custom = { ...settings, baseUrl };
+  ])(
+    "uses a supported %s permission pattern for %s",
+    async (browser, baseUrl, pattern) => {
+      vi.stubEnv("BROWSER", browser);
+      const port = permissionsPort(true);
+      const custom = { ...settings, baseUrl };
 
-    await requestProviderPermission(port, "custom", custom);
-    await expect(hasProviderPermission(port, "custom", custom)).resolves.toBe(true);
+      await requestProviderPermission(port, "custom", custom);
+      await expect(hasProviderPermission(port, "custom", custom)).resolves.toBe(
+        true,
+      );
 
-    expect(port.requested).toEqual([[pattern]]);
-    expect(port.checked).toEqual([[pattern]]);
-    expect(custom.baseUrl).toBe(baseUrl);
-  });
+      expect(port.requested).toEqual([[pattern]]);
+      expect(port.checked).toEqual([[pattern]]);
+      expect(custom.baseUrl).toBe(baseUrl);
+    },
+  );
 
   it("requests only the selected provider origin", async () => {
     const port = permissionsPort(true);
