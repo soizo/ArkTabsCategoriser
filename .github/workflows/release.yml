@@ -1,0 +1,57 @@
+name: Build and release
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify and package both browsers
+        run: |
+          npm run verify
+          npm run zip
+          npm run zip:firefox
+          cd .output
+          sha256sum *.zip > SHA256SUMS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="build-${RUN_ID}-${RUN_ATTEMPT}"
+          notes="$(mktemp)"
+          cat > "$notes" <<EOF
+          Automated build of commit ${COMMIT}.
+
+          Extension version: ${version}. Build: ${RUN_NUMBER}, attempt ${RUN_ATTEMPT}.
+          Includes Chrome and unsigned Firefox ZIPs plus SHA256SUMS.
+          Firefox ZIPs require Mozilla signing for permanent installation in standard Firefox.
+          EOF
+          gh release create "$tag" .output/*.zip .output/SHA256SUMS \
+            --target "$COMMIT" \
+            --title "v${version} · Build ${RUN_NUMBER}.${RUN_ATTEMPT}" \
+            --notes-file "$notes"
