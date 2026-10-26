@@ -2,7 +2,9 @@
 
 手动运行后，`Build and release` 工作流会安装依赖、运行测试并构建 Chrome 和 Firefox ZIP，随后创建 GitHub Release，附上两个浏览器的包及 `SHA256SUMS`。测试或构建失败时不发布。
 
-测试使用 Node 环境，无需安装浏览器或系统软件包。发布先做类型检查和测试，再由 `zip` / `zip:firefox` 各自构建并打包一次，避免先执行 `verify` 造成重复构建。
+发布前运行 `scripts/generate-icons.sh`，从 `assets/icon-source.svg` 生成各尺寸图标及 PNG 预览，再构建打包。仅当缺少 `rsvg-convert` 时安装最小的 `librsvg2-bin`（不安装推荐软件包），该步骤限时 3 分钟。
+
+测试使用 Node 环境，无需安装浏览器。发布先做类型检查和测试，再由 `zip` / `zip:firefox` 各自构建并打包一次，避免先执行 `verify` 造成重复构建。
 
 普通提交和推送不会触发构建发布。在 GitHub Actions 中选择 `Build and release` → `Run workflow`，选择默认分支运行。其他分支不发布。
 
