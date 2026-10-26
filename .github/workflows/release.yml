@@ -24,7 +24,8 @@ jobs:
 
       - name: Verify and package both browsers
         run: |
-          npm run verify
+          npm run typecheck
+          npm test
           npm run zip
           npm run zip:firefox
           cd .output
