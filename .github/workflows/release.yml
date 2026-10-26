@@ -22,6 +22,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate icons from SVG
+        timeout-minutes: 3
+        run: |
+          if ! command -v rsvg-convert >/dev/null 2>&1; then
+            sudo apt-get update -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+            sudo apt-get install -y --no-install-recommends librsvg2-bin
+          fi
+          bash scripts/generate-icons.sh
+
       - name: Verify and package both browsers
         run: |
           npm run typecheck
