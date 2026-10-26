@@ -14,7 +14,7 @@ Firefox ZIP 未签名，正式版 Firefox 的永久安装仍需 Mozilla 签名�
 
 在 GitHub Actions 中选择 **Set extension version** → **Run workflow**，选择目标分支并输入版本号，例如 `0.1.2`。版本必须为三段整数，每段 0–65535，无前导零，且不能是 `0.0.0`。
 
-工作流同步更新 `package.json` 和 `package-lock.json` 的根包版本，运行版本更新测试及 `npm run verify`（类型检查、测试、Chrome／Firefox 构建），成功后提交并推送到所选分支。WXT 从 `package.json` 读取版本，两种浏览器使用相同版本。相同版本不产生新提交；依赖版本不变。
+工作流同步更新 `package.json` 和 `package-lock.json` 的根包版本，仅运行无需安装依赖的版本更新专项测试，通过后提交并推送到所选分支；不安装浏览器、不执行完整测试或构建。WXT 从 `package.json` 读取版本，两种浏览器使用相同版本。相同版本不产生新提交；依赖版本不变。
 
 目标分支须允许机器人推送；分支在运行期间发生更新时不会强制覆盖。这个操作不自动发布，发布时另行在默认分支手动运行 **Build and release**。
 
