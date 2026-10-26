@@ -32,16 +32,11 @@ body {
 }
 
 .mini-mark {
-  display: grid;
+  display: block;
+  flex: 0 0 28px;
   width: 28px;
   height: 28px;
-  place-items: center;
-  border-radius: 9px;
-  color: white;
-  background: var(--ark-accent);
-  font-size: 12px;
-  font-weight: 740;
-  box-shadow: 0 6px 14px rgb(62 48 70 / 16%);
+  object-fit: contain;
 }
 
 .icon-button {
